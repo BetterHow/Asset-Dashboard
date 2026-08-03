@@ -758,8 +758,8 @@ else:
     }
     save_data("history_snapshots", st.session_state.history_snapshots)
 
-# 1. 調整欄位比例：把原本的 3 個欄位變成 4 個（標題、隱藏金額按鈕、重新整理按鈕、空白間距）
-col_title, col_toggle, col_refresh, col_empty = st.columns([1.5, 1.0, 1.0, 6.5])
+# 1. 恢復原本乾淨的標題與隱藏按鈕比例
+col_title, col_toggle, col_empty = st.columns([1.5, 1.0, 7.5])
 
 with col_title:
     st.markdown("<h3 style='margin: 0; padding-top: 5px; white-space: nowrap;'>資產總覽</h3>", unsafe_allow_html=True)
@@ -770,11 +770,12 @@ with col_toggle:
         st.session_state.privacy_mode = not st.session_state.privacy_mode
         st.rerun()
 
-# 2. 加上這段「重新整理」按鈕
-with col_refresh:
-    if st.button("🔄 重新整理", key="refresh_cache_btn", use_container_width=True):
-        st.cache_data.clear()  # 清空快取
-        st.rerun()             # 重新載入網頁
+# 2. 把「重新整理」按鈕移到側邊欄最下方，避免擠壓主畫面版面
+with st.sidebar:
+    st.markdown("---")
+    if st.button("🔄 重新整理快取", key="refresh_cache_btn", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
             
     privacy = st.session_state.privacy_mode
     
