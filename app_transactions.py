@@ -10,7 +10,24 @@ import concurrent.futures
 import gspread
 
 st.set_page_config(page_title="交易紀錄版｜個人資產", page_icon="📊", layout="wide")
-
+st.markdown(
+    """
+    <style>
+    /* 讓側邊欄頂部區域在捲動時固定 */
+    section[data-testid="stSidebar"] > div:first-child {
+        overflow-y: auto;
+    }
+    
+    /* 將收折/展開按鈕設定為固定在左上角 */
+    button[kind="header"] {
+        position: fixed !important;
+        top: 10px !important;
+        z-index: 999999;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 st.markdown("""
 <style>
 div[data-testid="stButton"] button p {
