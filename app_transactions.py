@@ -758,24 +758,21 @@ else:
     }
     save_data("history_snapshots", st.session_state.history_snapshots)
 
-# 1. 恢復「資產總覽」標題與隱藏按鈕的乾淨排版
-col_title, col_toggle, col_empty = st.columns([1.5, 1.0, 7.5])
+col_title, col_toggle, col_refresh, col_empty = st.columns([1.5, 1.0, 1.0, 6.5])
 
-with col_title:
-    st.markdown("<h3 style='margin: 0; padding-top: 5px; white-space: nowrap;'>資產總覽</h3>", unsafe_allow_html=True)
+    with col_title:
+        st.markdown("<h3 style='margin: 0; padding-top: 5px; white-space: nowrap;'>資產總覽</h3>", unsafe_allow_html=True)
 
-with col_toggle:
-    btn_text = "顯示金額" if st.session_state.privacy_mode else "隱藏金額"
-    if st.button(btn_text, key="privacy_toggle", use_container_width=True):
-        st.session_state.privacy_mode = not st.session_state.privacy_mode
-        st.rerun()
+    with col_toggle:
+        btn_text = "顯示金額" if st.session_state.privacy_mode else "隱藏金額"
+        if st.button(btn_text, key="privacy_toggle", use_container_width=True):
+            st.session_state.privacy_mode = not st.session_state.privacy_mode
+            st.rerun()
 
-# 2. 把「重新整理」按鈕放在主畫面的最上方（獨立一行，完全不擠壓側邊欄）
-col_space, col_btn = st.columns([8, 2])
-with col_btn:
-    if st.button("🔄 重新整理快取", key="refresh_cache_btn", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+    with col_refresh:
+        if st.button("重新整理", key="refresh_cache_btn", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
             
     privacy = st.session_state.privacy_mode
     
