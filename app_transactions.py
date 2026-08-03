@@ -46,9 +46,15 @@ LOCAL_FILES = {
 @st.cache_resource
 def get_gspread_client():
     try:
+        # 如果在雲端環境，就從保險箱 (secrets) 讀取金鑰
+        if "google_credentials" in st.secrets:
+            creds_dict = json.loads(st.secrets["google_credentials"])
+            return gspread.service_account_from_dict(creds_dict)
+
+        # 如果在本機環境，就讀取實體 json 檔案
         return gspread.service_account(filename=GC_KEY_FILE)
     except Exception as e:
-        st.error(f"⚠️ Google 授權失敗！請確認 `{GC_KEY_FILE}` 是否與程式放在同一個資料夾。錯誤：{e}")
+        st.error(f"⚠️ Google 授權失敗！請確認金鑰設定。錯誤：{e}")
         st.stop()
 
 gc = get_gspread_client()
