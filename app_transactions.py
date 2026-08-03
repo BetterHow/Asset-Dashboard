@@ -758,7 +758,7 @@ else:
     }
     save_data("history_snapshots", st.session_state.history_snapshots)
 
-col_title, col_toggle, col_refresh, col_empty = st.columns([1.5, 1.0, 1.0, 6.5])
+    col_title, col_toggle, col_refresh, col_empty = st.columns([1.5, 1.0, 1.0, 6.5])
 
     with col_title:
         st.markdown("<h3 style='margin: 0; padding-top: 5px; white-space: nowrap;'>資產總覽</h3>", unsafe_allow_html=True)
