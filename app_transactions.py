@@ -758,7 +758,7 @@ else:
     }
     save_data("history_snapshots", st.session_state.history_snapshots)
 
-# 1. 恢復原本乾淨的標題與隱藏按鈕比例
+# 1. 恢復「資產總覽」標題與隱藏按鈕的乾淨排版
 col_title, col_toggle, col_empty = st.columns([1.5, 1.0, 7.5])
 
 with col_title:
@@ -770,9 +770,9 @@ with col_toggle:
         st.session_state.privacy_mode = not st.session_state.privacy_mode
         st.rerun()
 
-# 2. 把「重新整理」按鈕移到側邊欄最下方，避免擠壓主畫面版面
-with st.sidebar:
-    st.markdown("---")
+# 2. 把「重新整理」按鈕放在主畫面的最上方（獨立一行，完全不擠壓側邊欄）
+col_space, col_btn = st.columns([8, 2])
+with col_btn:
     if st.button("🔄 重新整理快取", key="refresh_cache_btn", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
