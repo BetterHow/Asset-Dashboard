@@ -74,12 +74,16 @@ def get_gspread_client():
         st.error(f"⚠️ Google 授權失敗！請確認金鑰設定。錯誤：{e}")
         st.stop()
 
-gc = get_gspread_client()
-try:
-    sh = gc.open(SPREADSHEET_NAME)
-except gspread.exceptions.SpreadsheetNotFound:
-    st.error(f"⚠️ 找不到名為 `{SPREADSHEET_NAME}` 的試算表！請確認名稱，以及是否已將服務帳戶 Email 加入編輯者權限。")
-    st.stop()
+@st.cache_resource
+def get_spreadsheet():
+    client = get_gspread_client()
+    try:
+        return client.open(SPREADSHEET_NAME)
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error(f"⚠️ 找不到名為 `{SPREADSHEET_NAME}` 的試算表！請確認名稱，以及是否已將服務帳戶 Email 加入編輯者權限。")
+        st.stop()
+
+sh = get_spreadsheet()
 
 def save_data(sheet_name, data):
     try:
@@ -750,14 +754,18 @@ else:
 
     today_str = date.today().isoformat()
     
-    st.session_state.history_snapshots[today_str] = {
+    # 1. 先把今天的最新計算結果裝進一個暫存變數
+    new_snapshot = {
         "value": round(total_twd_snapshot, 2),
         "cost": round(total_cost_twd_snapshot, 2),
         "liability": round(total_liability_twd, 2),
         "categories": cat_snapshots
     }
-    save_data("history_snapshots", st.session_state.history_snapshots)
-
+    
+    # 2. 只有當「今天還沒有紀錄」或「今天的總金額有變動」時，才執行緩慢的存檔動作
+    if today_str not in st.session_state.history_snapshots or st.session_state.history_snapshots[today_str] != new_snapshot:
+        st.session_state.history_snapshots[today_str] = new_snapshot
+        save_data("history_snapshots", st.session_state.history_snapshots)
     col_title, col_toggle, col_refresh, col_empty = st.columns([1.5, 1.0, 1.0, 6.5])
 
     with col_title:
