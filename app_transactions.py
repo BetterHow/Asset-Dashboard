@@ -922,7 +922,7 @@ else:
         plot_df = view_df[view_df["名稱"].isin(st.session_state.visible_items)].copy()
         plot_df = plot_df.sort_values(by="顯示現值", ascending=False).reset_index(drop=True)
         
-        col_pie, col_nav = st.columns([0.92, 0.08])
+        col_pie, col_nav = st.columns([0.88, 0.12])
         
         with col_pie:
             try:
