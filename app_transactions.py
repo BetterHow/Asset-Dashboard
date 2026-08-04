@@ -18,8 +18,10 @@ st.markdown(
         overflow-y: auto;
     }
     
-    /* 將收折/展開按鈕設定為固定在左上角 */
-    button[kind="header"] {
+    /* 將收折/展開按鈕設定為固定在左上角（涵蓋 Streamlit 新舊版本標籤） */
+    button[kind="header"], 
+    div[data-testid="collapsedControl"], 
+    button[data-testid="stSidebarCollapseButton"] {
         position: fixed !important;
         top: 10px !important;
         z-index: 999999;
