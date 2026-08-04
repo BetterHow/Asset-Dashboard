@@ -157,7 +157,11 @@ if "clear_form" not in st.session_state:
     st.session_state.clear_form = False
 if "privacy_mode" not in st.session_state:
     st.session_state.privacy_mode = False
-
+if "prev_ticker" not in st.session_state:
+    st.session_state.prev_ticker = ""
+if "prev_type" not in st.session_state:
+    st.session_state.prev_type = "台股"
+    
 @st.cache_data(ttl=300, show_spinner=False)
 def get_rate(symbol: str):
     try:
@@ -615,21 +619,33 @@ with st.sidebar:
             
     ticker = st.text_input("代號", key="ticker_input")
 
+    # --- 💡 智慧判斷 1：根據代號自動切換類型與幣別 ---
+    ticker_val = str(ticker).strip().upper()
+    if ticker_val != st.session_state.prev_ticker:
+        if ticker_val.isdigit() or ticker_val.endswith((".TW", ".TWO")):
+            st.session_state["type_select"] = "台股"
+            st.session_state["currency_select"] = "TWD"
+        elif "-USD" in ticker_val:
+            st.session_state["type_select"] = "加密貨幣"
+            st.session_state["currency_select"] = "USD"
+        elif ticker_val.isalpha():
+            st.session_state["type_select"] = "美股"
+            st.session_state["currency_select"] = "USD"
+            
+        st.session_state.prev_ticker = ticker_val
+
     type_options = ["台股", "美股", "期貨", "加密貨幣", "債券", "其他"]
-    asset_type = st.selectbox("類型", type_options, index=0, key="type_select")
+    asset_type = st.selectbox("類型", type_options, key="type_select")
 
-    if asset_type in ["美股", "加密貨幣"]:
-        default_currency = "USD"
-    elif asset_type in ["台股", "期貨", "債券"]:
-        default_currency = "TWD"
-    else:
-        default_currency = "TWD"
+    # --- 💡 智慧判斷 2：當使用者手動切換類型時，幫忙連動預設幣別 ---
+    if asset_type != st.session_state.prev_type:
+        if asset_type in ["美股", "加密貨幣"]:
+            st.session_state["currency_select"] = "USD"
+        else:
+            st.session_state["currency_select"] = "TWD"
+        st.session_state.prev_type = asset_type
 
-    currency = st.selectbox(
-        "幣別", ["TWD", "USD"],
-        index=0 if default_currency == "TWD" else 1,
-        key="currency_select"
-    )
+    currency = st.selectbox("幣別", ["TWD", "USD"], key="currency_select")
 
     quantity_str = st.text_input("數量", placeholder="輸入數量 (若是期貨請填1)", key="qty_input")
     price_str = st.text_input(f"價格（{currency}）", value="", placeholder="輸入價格（留白將使用自動抓價）", key="price_input")
