@@ -296,7 +296,7 @@ def looks_like_ticker(text: str) -> bool:
     if not text:
         return False
     text = text.strip().upper()
-    return bool(re.fullmatch(r"[A-Z0-9.\-]{1,6}", text))
+    return bool(re.fullmatch(r"[A-Z0-9.\-]{1,15}", text))
 
 def mask_val(val_str):
     return "＊＊＊＊" if st.session_state.privacy_mode else val_str
@@ -594,9 +594,23 @@ with st.sidebar:
     name = st.text_input("資產名稱", key="name_input")
 
     if name and looks_like_ticker(name):
-        if st.session_state.get("ticker_input", "") != name.strip().upper():
-            st.session_state["ticker_input"] = name.strip().upper()
-
+        auto_ticker = name.strip().upper()
+        
+        # 💡 智慧轉換：如果輸入常見的加密貨幣，自動補上 Yahoo Finance 需要的後綴
+        crypto_map = {
+            "BTC": "BTC-USD",
+            "ETH": "ETH-USD",
+            "ADA": "ADA-USD",
+            "SOL": "SOL-USD",
+            "DOGE": "DOGE-USD",
+            "SUI": "SUI-USD"
+        }
+        if auto_ticker in crypto_map:
+            auto_ticker = crypto_map[auto_ticker]
+            
+        if st.session_state.get("ticker_input", "") != auto_ticker:
+            st.session_state["ticker_input"] = auto_ticker
+            
     ticker = st.text_input("代號", key="ticker_input")
 
     type_options = ["台股", "美股", "期貨", "加密貨幣", "債券", "其他"]
