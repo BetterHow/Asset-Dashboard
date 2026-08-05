@@ -860,10 +860,16 @@ else:
         tx_df_analysis["date_obj"] = pd.to_datetime(tx_df_analysis["date"])
         tx_df_analysis["target_label"] = tx_df_analysis.apply(lambda row: f"{row['name']} ({row['ticker']})" if row['ticker'] else row['name'], axis=1)
         
-        target_options_analysis = ["請選擇標的..."] + sorted(tx_df_analysis["target_label"].unique().tolist())
-        selected_analysis_target = st.selectbox("選擇要分析的標的", target_options_analysis, label_visibility="collapsed")
+        target_options_analysis = sorted(tx_df_analysis["target_label"].unique().tolist())
+        selected_analysis_target = st.selectbox(
+            "選擇要分析的標的", 
+            target_options_analysis, 
+            index=None,
+            placeholder="🔍 點擊此處並直接鍵盤輸入代號或名稱搜尋...",
+            label_visibility="collapsed"
+        )
         
-        if selected_analysis_target != "請選擇標的...":
+        if selected_analysis_target:
             with st.spinner(f"正在載入 {selected_analysis_target} 的歷史資料並回推圖表..."):
                 asset_tx = tx_df_analysis[tx_df_analysis["target_label"] == selected_analysis_target].sort_values("date_obj").copy()
                 ticker_to_fetch = asset_tx.iloc[0]["ticker"]
@@ -937,9 +943,10 @@ else:
                         margin=dict(t=10, b=20, l=10, r=10), height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                         xaxis=dict(showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d"),
                         yaxis=dict(showgrid=True, gridcolor="#333333", tickfont=dict(color="#e2e8f0"), zeroline=False, showticklabels=not privacy),
-                        hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                        dragmode="pan"
                     )
-                    st.plotly_chart(fig1, use_container_width=True)
+                    st.plotly_chart(fig1, use_container_width=True, config={'scrollZoom': True})
                 
                 # ------ 圖表 2: 價格走勢與交易點位 ------
                 with c_chart2:
@@ -963,7 +970,7 @@ else:
                         
                         if not buys.empty:
                             buys['hover'] = buys.apply(make_hover, axis=1)
-                            sizes = [max(8, min(30, (q / max_q) * 30)) for q in buys['quantity']]
+                            sizes = [max(8, min(25, (q / max_q) * 25)) for q in buys['quantity']]
                             fig2.add_trace(go.Scatter(
                                 x=buys['date_obj'], y=buys['price'], mode='markers', name='買進',
                                 marker=dict(color='#4ade80', size=sizes, line=dict(width=1, color='white')),
@@ -972,7 +979,7 @@ else:
                             
                         if not sells.empty:
                             sells['hover'] = sells.apply(make_hover, axis=1)
-                            sizes = [max(8, min(30, (q / max_q) * 30)) for q in sells['quantity']]
+                            sizes = [max(8, min(25, (q / max_q) * 25)) for q in sells['quantity']]
                             fig2.add_trace(go.Scatter(
                                 x=sells['date_obj'], y=sells['price'], mode='markers', name='賣出',
                                 marker=dict(color='#ef4444', size=sizes, line=dict(width=1, color='white')),
@@ -983,9 +990,10 @@ else:
                             margin=dict(t=10, b=20, l=10, r=10), height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                             xaxis=dict(showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d"),
                             yaxis=dict(showgrid=True, gridcolor="#333333", tickfont=dict(color="#e2e8f0"), zeroline=False, showticklabels=not privacy),
-                            hovermode="closest", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                            hovermode="closest", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                            dragmode="pan"
                         )
-                        st.plotly_chart(fig2, use_container_width=True)
+                        st.plotly_chart(fig2, use_container_width=True, config={'scrollZoom': True})
 
     st.divider()
     st.subheader("交易紀錄管理")
