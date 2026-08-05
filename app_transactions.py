@@ -801,15 +801,15 @@ else:
             st.dataframe(privacy_df, use_container_width=True, hide_index=True)
         else:
             st.dataframe(show_df, use_container_width=True, hide_index=True, column_config={
-                "數量": st.column_config.NumberColumn("數量", format="%.4f"), 
-                "平均成本": st.column_config.NumberColumn("平均成本", format="%.4f"),
-                "調整後成本": st.column_config.NumberColumn("調整後成本", format="%.4f"),
-                "現價": st.column_config.NumberColumn("現價", format="%.4f"), 
-                "現值": st.column_config.NumberColumn("現值", format="%.2f"), 
-                "未實現損益": st.column_config.NumberColumn("未實現損益", format="%.2f"),
-                "SP權利金": st.column_config.NumberColumn("SP權利金", format="%.2f"),
-                "CC權利金": st.column_config.NumberColumn("CC權利金", format="%.2f"),
-                "已實現總損益": st.column_config.NumberColumn("已實現總損益", format="%.2f")
+                "數量": st.column_config.NumberColumn("數量", format="%.0f"), 
+                "平均成本": st.column_config.NumberColumn("平均成本", format="%.2f"),
+                "調整後成本": st.column_config.NumberColumn("調整後成本", format="%.2f"),
+                "現價": st.column_config.NumberColumn("現價", format="%.2f"), 
+                "現值": st.column_config.NumberColumn("現值", format="%.0f"), 
+                "未實現損益": st.column_config.NumberColumn("未實現損益", format="%.0f"),
+                "SP權利金": st.column_config.NumberColumn("SP權利金", format="%.0f"),
+                "CC權利金": st.column_config.NumberColumn("CC權利金", format="%.0f"),
+                "已實現總損益": st.column_config.NumberColumn("已實現總損益", format="%.0f")
             })
 
         if st.session_state.selected_category != "現金":
