@@ -197,7 +197,6 @@ def calculate_holdings(transactions):
         qty = float(t.get("quantity", 0))
         price = float(t.get("price", 0))
         
-        # SP / CC 允許輸入數量 0，此時直接將 price 視為總權利金
         if t["type"] in ["Sell Put", "Covered Call"] and qty == 0:
             amount = price
         else:
@@ -424,7 +423,7 @@ with st.sidebar:
         st.session_state["price_input"] = ""
         st.session_state.clear_form = False
 
-    action = st.radio("交易類型", ["買進", "賣出", "Sell Put", "Covered Call"], horizontal=True, key="action_radio")
+    action = st.selectbox("交易類型", ["買進", "賣出", "Sell Put", "Covered Call"], key="action_radio")
     name = st.text_input("資產名稱", key="name_input")
     if name and looks_like_ticker(name):
         auto_ticker = {"BTC": "BTC-USD", "ETH": "ETH-USD", "ADA": "ADA-USD", "SOL": "SOL-USD", "DOGE": "DOGE-USD", "SUI": "SUI-USD"}.get(name.strip().upper(), name.strip().upper())
@@ -457,8 +456,9 @@ with st.sidebar:
                 
         is_premium_action = action in ["Sell Put", "Covered Call"]
         valid_qty = (qty is not None and qty >= 0) if is_premium_action else (qty is not None and qty > 0)
+        valid_price = (price is not None) if is_premium_action else (price is not None and price > 0)
         
-        if name and valid_qty and price is not None and price > 0:
+        if name and valid_qty and valid_price:
             new_tx = {
                 "id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "date": trade_date.strftime("%Y-%m-%d"),
                 "type": action, "name": name, "ticker": str(ticker).strip().upper() if ticker else "",
@@ -471,7 +471,7 @@ with st.sidebar:
             save_data("transactions", st.session_state.transactions)
             fetch_all_prices.clear()
             st.rerun()
-        else: st.warning("請正確填寫。若是 SP/CC 數量可為 0，但價格必須大於 0。")
+        else: st.warning("請正確填寫。買進賣出價格需大於 0；SP/CC 數量可為 0，且價格可輸入負數表示平倉買回。")
 
     st.divider()
     st.caption(f"交易紀錄：{len(st.session_state.transactions)} 筆")
@@ -480,7 +480,6 @@ with st.sidebar:
 
 holdings = calculate_holdings(st.session_state.transactions)
 
-# 加入現金帳戶
 for acc in st.session_state.cash_accounts:
     holdings.append({
         "名稱": acc["name"], "代號": "", "幣別": acc["currency"], "類型": "現金", 
@@ -491,17 +490,20 @@ if not holdings:
     st.info("目前沒有持倉或現金。請從左側新增第一筆交易，或在下方新增現金帳戶。")
     render_cash_manager()
 else:
-    # 根據開關動態計算有效成本
     for h in holdings:
         if h.get("is_cash"):
             h["總成本"] = h["原始總成本"]
             h["平均成本"] = 1.0
+            h["調整後成本"] = 1.0
         else:
             eff_cost = h["原始總成本"]
+            adj_total_cost = h["原始總成本"] - h["CC權利金"] - h["SP權利金"]
             if st.session_state.get("include_premium", False):
-                eff_cost = h["原始總成本"] - h["CC權利金"] - h["SP權利金"]
+                eff_cost = adj_total_cost
+                
             h["總成本"] = eff_cost
-            h["平均成本"] = eff_cost / h["數量"] if h["數量"] > 0 else 0
+            h["平均成本"] = h["原始總成本"] / h["數量"] if h["數量"] > 0 else 0
+            h["調整後成本"] = adj_total_cost / h["數量"] if h["數量"] > 0 else 0
 
     df = pd.DataFrame(holdings)
     df["類型"] = df["類型"].replace({"股票": "台股", "ETF": "台股"})
@@ -596,8 +598,7 @@ else:
         st.session_state.display_currency = new_currency
         st.rerun()
 
-    # 🔮 獨立權利金降本開關 (觸發後即時重算)
-    st.checkbox("🔮 損益計算包含權利金降本效益 (Sell Put / Covered Call)", key="include_premium")
+    st.checkbox("損益計算包含權利金降本效益", key="include_premium")
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("淨資產現值", mask_val(f"{unit.replace('&#36;', '$')} {fmt_total(net_value, display_currency)}"))
@@ -607,7 +608,6 @@ else:
 
     render_liability_manager(unit, display_currency, total_value, net_value)
 
-    # ================= 📈 圖表過濾器 (隱藏 0 股數的 SP 部位) =================
     df_chart = df[df["數量"] > 0].copy()
 
     st.subheader("目前持倉配置")
@@ -783,10 +783,10 @@ else:
         if st.session_state.selected_category == "現金": render_cash_manager()
         detail_df = df[df["類型"] == st.session_state.selected_category] if is_category_view else df
         
-        # 📈 新增 SP / CC 與已實現損益的展示欄位
         show_df = pd.DataFrame({
             "名稱": detail_df["名稱"], "代號": detail_df["代號"], "類型": detail_df["類型"], "幣別": detail_df["幣別"], "數量": detail_df["數量"],
             "平均成本": detail_df.apply(lambda r: None if r.get("is_cash") else r["平均成本"], axis=1),
+            "調整後成本": detail_df.apply(lambda r: None if r.get("is_cash") else r["調整後成本"], axis=1),
             "現價": detail_df.apply(lambda r: None if r.get("is_cash") else r["現價"], axis=1),
             "現值": detail_df["現值"], 
             "未實現損益": detail_df.apply(lambda r: None if r.get("is_cash") else r["未實現損益"], axis=1),
@@ -797,12 +797,13 @@ else:
 
         if privacy:
             privacy_df = show_df.copy()
-            privacy_df[["數量", "平均成本", "現價", "現值", "未實現損益", "SP權利金", "CC權利金", "已實現總損益"]] = "＊＊＊＊"
+            privacy_df[["數量", "平均成本", "調整後成本", "現價", "現值", "未實現損益", "SP權利金", "CC權利金", "已實現總損益"]] = "＊＊＊＊"
             st.dataframe(privacy_df, use_container_width=True, hide_index=True)
         else:
             st.dataframe(show_df, use_container_width=True, hide_index=True, column_config={
                 "數量": st.column_config.NumberColumn("數量", format="%.4f"), 
                 "平均成本": st.column_config.NumberColumn("平均成本", format="%.4f"),
+                "調整後成本": st.column_config.NumberColumn("調整後成本", format="%.4f"),
                 "現價": st.column_config.NumberColumn("現價", format="%.4f"), 
                 "現值": st.column_config.NumberColumn("現值", format="%.2f"), 
                 "未實現損益": st.column_config.NumberColumn("未實現損益", format="%.2f"),
@@ -881,7 +882,7 @@ else:
                         if b1.button("儲存", key=f"save_tx_{row['id']}", type="primary", use_container_width=True):
                             for idx, t in enumerate(st.session_state.transactions):
                                 if t["id"] == row["id"]:
-                                    st.session_state.transactions[idx].update({"date": new_date.strftime("%Y-%m-%d"), "type": new_type, "name": new_name.strip(), "ticker": new_ticker.strip().upper(), "quantity": safe_float(new_qty) or row["quantity"], "price": safe_float(new_price) or row["price"], "currency": new_curr})
+                                    st.session_state.transactions[idx].update({"date": new_date.strftime("%Y-%m-%d"), "type": new_type, "name": new_name.strip(), "ticker": new_ticker.strip().upper(), "quantity": safe_float(new_qty) or row["quantity"], "price": safe_float(new_price) if safe_float(new_price) is not None else row["price"], "currency": new_curr})
                                     break
                             save_data("transactions", st.session_state.transactions)
                             st.session_state.editing_id = None
