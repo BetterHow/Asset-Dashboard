@@ -44,7 +44,7 @@ div[data-testid="stTextInput"] div {
 """, unsafe_allow_html=True)
 
 st.title("📊 個人資產儀表板（交易紀錄版）")
-st.caption("支援買進 / 賣出 / SP / CC｜動態現金管理｜負債追蹤｜單一標的分析｜隱私保護")
+st.caption("支援買進 / 賣出 / SP / CC / 配息｜動態現金管理｜負債追蹤｜單一標的分析｜隱私保護")
 
 # ========================================================
 # 🚀 Google Sheets 雲端資料庫連線區塊
@@ -156,7 +156,6 @@ btc_usd = get_rate("BTC-USD") or 95000.0
 
 EXTRA_RATES = {"EUR/TWD": "EURTWD=X", "JPY/TWD": "JPYTWD=X", "GBP/TWD": "GBPTWD=X", "BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"}
 
-# 💡 優化抓價邏輯，精準判斷台灣 ETF 避免浪費時間查詢空代號
 def get_latest_price(ticker: str):
     if not ticker: return None
     ticker = ticker.strip().upper()
@@ -183,7 +182,6 @@ def get_latest_price(ticker: str):
         except Exception: continue
     return None
 
-# 💡 同步優化歷史圖表抓價邏輯
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_historical_prices_for_chart(ticker: str, start_date: pd.Timestamp):
     if not ticker: return pd.DataFrame()
@@ -227,12 +225,12 @@ def calculate_holdings(transactions):
             holdings[key] = {
                 "名稱": t.get("name", key), "代號": t.get("ticker", ""), "幣別": t.get("currency", "TWD"),
                 "類型": t.get("type_category", "其他"), "數量": 0.0, "原始總成本": 0.0,
-                "CC權利金": 0.0, "SP權利金": 0.0, "已實現損益": 0.0
+                "CC權利金": 0.0, "SP權利金": 0.0, "股息": 0.0, "已實現損益": 0.0
             }
         qty = float(t.get("quantity", 0))
         price = float(t.get("price", 0))
         
-        if t["type"] in ["Sell Put", "Covered Call"] and qty == 0:
+        if t["type"] in ["Sell Put", "Covered Call", "配息"] and qty == 0:
             amount = price
         else:
             amount = qty * price
@@ -257,14 +255,17 @@ def calculate_holdings(transactions):
         elif t["type"] == "Sell Put":
             holdings[key]["SP權利金"] += amount
             holdings[key]["已實現損益"] += amount
+        elif t["type"] == "配息":
+            holdings[key]["股息"] += amount
+            holdings[key]["已實現損益"] += amount
 
     result = []
     for key, h in holdings.items():
-        if h["數量"] > 0.0001 or h["CC權利金"] > 0 or h["SP權利金"] > 0 or h["已實現損益"] != 0:
+        if h["數量"] > 0.0001 or h["CC權利金"] > 0 or h["SP權利金"] > 0 or h["股息"] > 0 or h["已實現損益"] != 0:
             result.append({
                 "名稱": h["名稱"], "代號": h["代號"], "幣別": h["幣別"], "類型": h["類型"],
                 "數量": round(h["數量"], 6), "原始總成本": round(h["原始總成本"], 2),
-                "CC權利金": round(h["CC權利金"], 2), "SP權利金": round(h["SP權利金"], 2),
+                "CC權利金": round(h["CC權利金"], 2), "SP權利金": round(h["SP權利金"], 2), "股息": round(h["股息"], 2),
                 "已實現損益": round(h["已實現損益"], 2), "is_cash": False
             })
     return result
@@ -520,17 +521,17 @@ with st.sidebar:
         st.session_state["prev_ticker_input"] = current_ticker
         st.session_state["prev_name_input"] = st.session_state.get("name_input", "")
 
-    action = st.selectbox("交易類型", ["買進", "賣出", "Sell Put", "Covered Call"], key="action_radio")
+    action = st.selectbox("交易類型", ["買進", "賣出", "Sell Put", "Covered Call", "配息"], key="action_radio")
     name = st.text_input("資產名稱", key="name_input")
     ticker = st.text_input("代號", key="ticker_input")
     ticker_val = str(ticker).strip().upper()
     
     if ticker_val != st.session_state.prev_ticker:
-        # 💡 自動判斷：偵測到純數字 + B (如 00679B) 自動判定為「債券」並預設為「TWD」
+        # 💡 自動判斷：偵測到純數字 + B 自動判定為「債券」並預設為「TWD」；純數字或 L/R 結尾判定為「台股」
         clean_t = ticker_val.replace(".TW", "").replace(".TWO", "")
         if clean_t.endswith("B") and len(clean_t) > 1 and clean_t[:-1].isdigit():
             st.session_state["type_select"] = "債券"
-        elif ticker_val.isdigit() or ticker_val.endswith((".TW", ".TWO")):
+        elif clean_t.isdigit() or (len(clean_t) > 1 and clean_t[:-1].isdigit() and clean_t[-1] in ["L", "R"]):
             st.session_state["type_select"] = "台股"
         elif "-USD" in ticker_val:
             st.session_state["type_select"] = "加密貨幣"
@@ -559,8 +560,8 @@ with st.sidebar:
         st.session_state.prev_type = asset_type
 
     currency = st.selectbox("幣別", ["TWD", "USD"], key="currency_select")
-    quantity_str = st.text_input("數量", placeholder="輸入數量 (SP/CC 可輸入 0)", key="qty_input")
-    price_str = st.text_input(f"價格（{currency}）", value="", placeholder="輸入價格/總權利金 (留白將自動抓價)", key="price_input")
+    quantity_str = st.text_input("數量", placeholder="輸入數量 (SP/CC/配息 可輸入 0)", key="qty_input")
+    price_str = st.text_input(f"價格（{currency}）", value="", placeholder="輸入價格/總權利金/配息總額 (留白將自動抓價)", key="price_input")
     trade_date = st.date_input("交易日期", value=date.today(), key="date_input")
     note = st.text_input("備註", value="", key="note_input")
 
@@ -571,7 +572,7 @@ with st.sidebar:
             market_price = get_latest_price(str(ticker))
             if market_price: price = market_price
                 
-        is_premium_action = action in ["Sell Put", "Covered Call"]
+        is_premium_action = action in ["Sell Put", "Covered Call", "配息"]
         valid_qty = (qty is not None and qty >= 0) if is_premium_action else (qty is not None and qty > 0)
         valid_price = (price is not None) if is_premium_action else (price is not None and price >= 0)
         
@@ -588,7 +589,7 @@ with st.sidebar:
             save_data("transactions", st.session_state.transactions)
             fetch_all_prices.clear()
             st.rerun()
-        else: st.warning("請正確填寫。買進賣出價格需大於等於 0（配股請填 0）；SP/CC 數量可為 0，且價格可輸入負數表示平倉買回。")
+        else: st.warning("請正確填寫。買進賣出價格需大於等於 0（配股請填 0）；SP/CC/配息 數量可為 0，且價格可輸入負數表示平倉買回或資金退回。")
 
     st.divider()
     st.caption(f"交易紀錄：{len(st.session_state.transactions)} 筆")
@@ -600,7 +601,7 @@ holdings = calculate_holdings(st.session_state.transactions)
 for acc in st.session_state.cash_accounts:
     holdings.append({
         "名稱": acc["name"], "代號": "", "幣別": acc["currency"], "類型": "現金", 
-        "數量": acc["balance"], "原始總成本": acc["balance"], "CC權利金": 0.0, "SP權利金": 0.0, "已實現損益": 0.0, "is_cash": True
+        "數量": acc["balance"], "原始總成本": acc["balance"], "CC權利金": 0.0, "SP權利金": 0.0, "股息": 0.0, "已實現損益": 0.0, "is_cash": True
     })
 
 if not holdings:
@@ -614,7 +615,7 @@ else:
             h["調整後成本"] = 1.0
         else:
             eff_cost = h["原始總成本"]
-            adj_total_cost = h["原始總成本"] - h["CC權利金"] - h["SP權利金"]
+            adj_total_cost = h["原始總成本"] - h["CC權利金"] - h["SP權利金"] - h["股息"]
             if st.session_state.get("include_premium", False):
                 eff_cost = adj_total_cost
                 
@@ -715,7 +716,7 @@ else:
         st.session_state.display_currency = new_currency
         st.rerun()
 
-    st.checkbox("損益計算包含權利金降本效益", key="include_premium")
+    st.checkbox("損益含權利金/配息", key="include_premium")
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("淨資產現值", mask_val(f"{unit.replace('&#36;', '$')} {fmt_total(net_value, display_currency)}"))
@@ -792,7 +793,6 @@ else:
         col_pie, col_nav = st.columns([0.88, 0.12])
         
         with col_pie:
-            # 💡 在「⚙️ 圖表設定」Popover 中新增「圖表類型」選擇器
             try:
                 with st.popover("⚙️ 圖表設定"):
                     chart_type_choice = st.selectbox("圖表類型", ["自動 (預設)", "圓餅圖", "長條圖"], index=0, key="chart_type_select")
@@ -819,7 +819,6 @@ else:
                     bar_text_labels.append(f"<b>{pct_in_view:.1f}%<br>({pct_of_total:.1f}%)</b>" if is_category_view else f"<b>{pct_in_view:.1f}%</b>")
                     pie_text_labels.append(f"<b>{lab}</b><br>{pct_in_view:.1f}%<br>({pct_of_total:.1f}%)" if pct_in_view >= 1.0 and is_category_view else f"<b>{lab}</b><br>{pct_in_view:.1f}%" if pct_in_view >= 1.0 else "")
                 
-                # 💡 判斷要繪製長條圖還是圓餅圖
                 show_bar_chart = (chart_type_choice == "長條圖") or (chart_type_choice == "自動 (預設)" and len(labels) > 10)
 
                 if show_bar_chart:
@@ -913,27 +912,45 @@ else:
             "現價": detail_df.apply(lambda r: None if r.get("is_cash") else r["現價"], axis=1),
             "現值": detail_df["現值"], 
             "未實現損益": detail_df.apply(lambda r: None if r.get("is_cash") else r["未實現損益"], axis=1),
+            "股息": detail_df.apply(lambda r: None if r.get("is_cash") else r["股息"], axis=1),
             "SP權利金": detail_df.apply(lambda r: None if r.get("is_cash") else r["SP權利金"], axis=1),
             "CC權利金": detail_df.apply(lambda r: None if r.get("is_cash") else r["CC權利金"], axis=1),
             "已實現總損益": detail_df.apply(lambda r: None if r.get("is_cash") else r["已實現損益"], axis=1)
         })
 
+        # 💡 動態欄位顯示邏輯
+        all_cols = ["名稱", "代號", "類型", "幣別", "數量", "平均成本", "調整後成本", "現價", "現值", "未實現損益", "股息", "SP權利金", "CC權利金", "已實現總損益"]
+        if is_category_view:
+            if st.session_state.selected_category == "美股":
+                display_cols = all_cols
+            elif st.session_state.selected_category in ["台股", "債券"]:
+                display_cols = [c for c in all_cols if c not in ["SP權利金", "CC權利金"]]
+            else:
+                display_cols = [c for c in all_cols if c not in ["SP權利金", "CC權利金"]]
+        else:
+            display_cols = all_cols
+            
+        show_df = show_df[display_cols]
+
         if privacy:
             privacy_df = show_df.copy()
-            privacy_df[["數量", "平均成本", "調整後成本", "現價", "現值", "未實現損益", "SP權利金", "CC權利金", "已實現總損益"]] = "＊＊＊＊"
+            num_cols_to_mask = [c for c in display_cols if c not in ["名稱", "代號", "類型", "幣別"]]
+            privacy_df[num_cols_to_mask] = "＊＊＊＊"
             st.dataframe(privacy_df, use_container_width=True, hide_index=True)
         else:
-            st.dataframe(show_df, use_container_width=True, hide_index=True, column_config={
+            col_cfg = {
                 "數量": st.column_config.NumberColumn("數量", format="%.0f"), 
                 "平均成本": st.column_config.NumberColumn("平均成本", format="%.2f"),
                 "調整後成本": st.column_config.NumberColumn("調整後成本", format="%.2f"),
                 "現價": st.column_config.NumberColumn("現價", format="%.2f"), 
                 "現值": st.column_config.NumberColumn("現值", format="%.0f"), 
                 "未實現損益": st.column_config.NumberColumn("未實現損益", format="%.0f"),
+                "股息": st.column_config.NumberColumn("股息", format="%.0f"),
                 "SP權利金": st.column_config.NumberColumn("SP權利金", format="%.0f"),
                 "CC權利金": st.column_config.NumberColumn("CC權利金", format="%.0f"),
                 "已實現總損益": st.column_config.NumberColumn("已實現總損益", format="%.0f")
-            })
+            }
+            st.dataframe(show_df, use_container_width=True, hide_index=True, column_config=col_cfg)
 
         if st.session_state.selected_category != "現金":
             st.markdown("##### 手動設定現價")
@@ -1019,7 +1036,7 @@ else:
                                     current_cost -= (sell_q * avg_p)
                                     if current_shares < 1e-5:
                                         current_shares, current_cost = 0.0, 0.0
-                            elif action in ["Sell Put", "Covered Call"]:
+                            elif action in ["Sell Put", "Covered Call", "配息"]:
                                 if st.session_state.get("include_premium", False):
                                     current_cost -= price
                     
@@ -1119,7 +1136,7 @@ else:
             date_preset = st.selectbox("篩選時間範圍", ["全部", "本月", "半年", "一年", "自訂區間"])
             date_range = st.date_input("選擇日期", value=(min_d, max_d), min_value=min_d, max_value=max_d) if date_preset == "自訂區間" else (min_d, max_d) if date_preset == "全部" else (today_d.replace(day=1), today_d) if date_preset == "本月" else (today_d - timedelta(days=183), today_d) if date_preset == "半年" else (today_d - timedelta(days=365), today_d)
         with f_c2: selected_target = st.selectbox("篩選標的", target_options)
-        with f_c3: action_filter = st.selectbox("篩選動作", ["全部", "買進", "賣出", "Sell Put", "Covered Call"])
+        with f_c3: action_filter = st.selectbox("篩選動作", ["全部", "買進", "賣出", "Sell Put", "Covered Call", "配息"])
 
         if isinstance(date_range, tuple):
             if len(date_range) == 2: tx_df = tx_df[(tx_df["date_obj"] >= date_range[0]) & (tx_df["date_obj"] <= date_range[1])]
@@ -1134,7 +1151,7 @@ else:
                     c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 2.0, 1.8, 0.7, 1.3])
                     with c1: new_date = st.date_input("日期", value=date.fromisoformat(row["date"]), key=f"ed_d_{row['id']}", label_visibility="collapsed")
                     with c2: 
-                        type_options_list = ["買進", "賣出", "Sell Put", "Covered Call"]
+                        type_options_list = ["買進", "賣出", "Sell Put", "Covered Call", "配息"]
                         current_type_idx = type_options_list.index(row["type"]) if row["type"] in type_options_list else 0
                         new_type = st.selectbox("動作", type_options_list, index=current_type_idx, key=f"ed_t_{row['id']}", label_visibility="collapsed")
                     with c3:
