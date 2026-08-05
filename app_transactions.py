@@ -156,10 +156,19 @@ btc_usd = get_rate("BTC-USD") or 95000.0
 
 EXTRA_RATES = {"EUR/TWD": "EURTWD=X", "JPY/TWD": "JPYTWD=X", "GBP/TWD": "GBPTWD=X", "BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"}
 
+# 💡 優化抓價邏輯，精準判斷台灣 ETF 避免浪費時間查詢空代號
 def get_latest_price(ticker: str):
     if not ticker: return None
     ticker = ticker.strip().upper()
-    candidates = [f"{ticker}.TW", f"{ticker}.TWO"] if ticker.isdigit() else [ticker] + ([f"{ticker}.TW", f"{ticker}.TWO"] if not ticker.endswith((".TW", ".TWO")) and ticker.isalnum() and not ticker.isalpha() else [])
+    
+    clean_t = ticker.replace(".TW", "").replace(".TWO", "")
+    is_tw_symbol = clean_t.isdigit() or (len(clean_t) > 1 and clean_t[:-1].isdigit() and clean_t[-1] in ["B", "L", "R"])
+    
+    if is_tw_symbol:
+        candidates = [f"{clean_t}.TW", f"{clean_t}.TWO"]
+    else:
+        candidates = [ticker] + ([f"{ticker}.TW", f"{ticker}.TWO"] if not ticker.endswith((".TW", ".TWO")) and ticker.isalnum() and not ticker.isalpha() else [])
+
     for sym in candidates:
         try:
             stock = yf.Ticker(sym)
@@ -174,11 +183,20 @@ def get_latest_price(ticker: str):
         except Exception: continue
     return None
 
+# 💡 同步優化歷史圖表抓價邏輯
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_historical_prices_for_chart(ticker: str, start_date: pd.Timestamp):
     if not ticker: return pd.DataFrame()
     ticker = ticker.strip().upper()
-    candidates = [f"{ticker}.TW", f"{ticker}.TWO"] if ticker.isdigit() else [ticker] + ([f"{ticker}.TW", f"{ticker}.TWO"] if not ticker.endswith((".TW", ".TWO")) and ticker.isalnum() and not ticker.isalpha() else [])
+    
+    clean_t = ticker.replace(".TW", "").replace(".TWO", "")
+    is_tw_symbol = clean_t.isdigit() or (len(clean_t) > 1 and clean_t[:-1].isdigit() and clean_t[-1] in ["B", "L", "R"])
+    
+    if is_tw_symbol:
+        candidates = [f"{clean_t}.TW", f"{clean_t}.TWO"]
+    else:
+        candidates = [ticker] + ([f"{ticker}.TW", f"{ticker}.TWO"] if not ticker.endswith((".TW", ".TWO")) and ticker.isalnum() and not ticker.isalpha() else [])
+
     for sym in candidates:
         try:
             stock = yf.Ticker(sym)
@@ -520,7 +538,7 @@ with st.sidebar:
             st.session_state["type_select"] = "美股"
         else:
             st.session_state["type_select"] = "其他"
-            
+
         st.session_state["currency_select"] = "USD" if st.session_state["type_select"] in ["美股", "加密貨幣"] else "TWD"
         st.session_state.prev_ticker = ticker_val
 
