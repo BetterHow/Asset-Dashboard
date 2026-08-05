@@ -156,6 +156,7 @@ btc_usd = get_rate("BTC-USD") or 95000.0
 
 EXTRA_RATES = {"EUR/TWD": "EURTWD=X", "JPY/TWD": "JPYTWD=X", "GBP/TWD": "GBPTWD=X", "BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"}
 
+# 💡 優化抓價邏輯：自動精準判斷台灣 ETF 與股票，優先使用 .TW 與 .TWO
 def get_latest_price(ticker: str):
     if not ticker: return None
     ticker = ticker.strip().upper()
@@ -176,12 +177,14 @@ def get_latest_price(ticker: str):
                 if price is not None and not pd.isna(price) and price > 0: return round(float(price), 4)
             except Exception: pass
             try:
-                hist = stock.history(period="1mo")
+                # 💡 強制 auto_adjust=False 以獲取未還原的真實收盤價
+                hist = stock.history(period="1mo", auto_adjust=False)
                 if not hist.empty: return round(float(hist["Close"].dropna().iloc[-1]), 4)
             except Exception: pass
         except Exception: continue
     return None
 
+# 💡 歷史資料也同步優化抓價邏輯
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_historical_prices_for_chart(ticker: str, start_date: pd.Timestamp):
     if not ticker: return pd.DataFrame()
@@ -198,7 +201,8 @@ def get_historical_prices_for_chart(ticker: str, start_date: pd.Timestamp):
     for sym in candidates:
         try:
             stock = yf.Ticker(sym)
-            hist = stock.history(start=start_date)
+            # 💡 強制 auto_adjust=False 以獲取未還原的真實收盤價
+            hist = stock.history(start=start_date, auto_adjust=False)
             if not hist.empty:
                 hist.index = hist.index.tz_localize(None).normalize()
                 return hist
@@ -493,7 +497,6 @@ with st.sidebar:
     }
     REVERSE_MAP = {v: k for k, v in TW_STOCK_MAP.items()}
 
-    # 雙向聯動邏輯：在渲染前檢查狀態
     current_name = st.session_state.get("name_input", "")
     current_ticker = st.session_state.get("ticker_input", "")
 
@@ -527,7 +530,6 @@ with st.sidebar:
     ticker_val = str(ticker).strip().upper()
     
     if ticker_val != st.session_state.prev_ticker:
-        # 💡 自動判斷：偵測到純數字 + B 自動判定為「債券」並預設為「TWD」；純數字或 L/R 結尾判定為「台股」
         clean_t = ticker_val.replace(".TW", "").replace(".TWO", "")
         if clean_t.endswith("B") and len(clean_t) > 1 and clean_t[:-1].isdigit():
             st.session_state["type_select"] = "債券"
@@ -543,7 +545,6 @@ with st.sidebar:
         st.session_state["currency_select"] = "USD" if st.session_state["type_select"] in ["美股", "加密貨幣"] else "TWD"
         st.session_state.prev_ticker = ticker_val
 
-        # 💡 動態預填價格：打完代號後自動查詢報價並顯示在價格欄位
         if len(ticker_val) >= 2:
             with st.spinner("抓取最新報價中..."):
                 fetched_price = get_latest_price(ticker_val)
@@ -918,7 +919,6 @@ else:
             "已實現總損益": detail_df.apply(lambda r: None if r.get("is_cash") else r["已實現損益"], axis=1)
         })
 
-        # 💡 動態欄位顯示邏輯
         all_cols = ["名稱", "代號", "類型", "幣別", "數量", "平均成本", "調整後成本", "現價", "現值", "未實現損益", "股息", "SP權利金", "CC權利金", "已實現總損益"]
         if is_category_view:
             if st.session_state.selected_category == "美股":
