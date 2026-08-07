@@ -10,41 +10,6 @@ import concurrent.futures
 import gspread
 
 st.set_page_config(page_title="交易紀錄版｜個人資產", page_icon="📊", layout="wide")
-st.markdown(
-    """
-    <style>
-    /* 讓側邊欄頂部區域在捲動時固定 */
-    section[data-testid="stSidebar"] > div:first-child {
-        overflow-y: auto;
-    }
-    
-    /* 僅將側邊欄收折/展開按鈕設定為固定，避免誤傷右上角系統選單 */
-    div[data-testid="collapsedControl"], 
-    button[data-testid="stSidebarCollapseButton"] {
-        position: fixed !important;
-        top: 10px !important;
-        z-index: 999999;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-st.markdown("""
-<style>
-div[data-testid="stButton"] button p {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-div[data-testid="stTextInput"] div {
-    padding-top: 0px;
-    padding-bottom: 0px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.title("📊 個人資產儀表板（交易紀錄版）")
-st.caption("支援買進 / 賣出 / SP / CC / 配息｜動態現金管理｜負債追蹤｜單一標的分析｜隱私保護")
 
 # ========================================================
 # 🚀 Google Sheets 雲端資料庫連線區塊
@@ -114,18 +79,38 @@ def load_or_migrate_data(sheet_name, default_val):
         pass
     return default_val
 
+# ========================================================
+# 📊 以下為正式 App 儀表板
+# ========================================================
+st.markdown(
+    """
+    <style>
+    section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; }
+    
+    /* 僅將側邊欄收折/展開按鈕設定為固定，避免誤傷右上角系統選單 */
+    div[data-testid="collapsedControl"], 
+    button[data-testid="stSidebarCollapseButton"] {
+        position: fixed !important; 
+        top: 10px !important; 
+        z-index: 999999;
+    }
+    div[data-testid="stButton"] button p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    div[data-testid="stTextInput"] div { padding-top: 0px; padding-bottom: 0px; }
+    </style>
+    """, unsafe_allow_html=True
+)
+
+st.title("📊 個人資產儀表板（交易紀錄版）")
+st.caption("支援買進 / 賣出 / SP / CC / 配息｜動態現金管理｜負債追蹤｜單一標的分析｜隱私保護")
+
+# 初始化載入資料 (從 Google Sheets)
 if "transactions" not in st.session_state: st.session_state.transactions = load_or_migrate_data("transactions", [])
 if "manual_prices" not in st.session_state: st.session_state.manual_prices = load_or_migrate_data("manual_prices", {})
 if "cash_accounts" not in st.session_state: st.session_state.cash_accounts = load_or_migrate_data("cash_accounts", [])
 if "liabilities_accounts" not in st.session_state: st.session_state.liabilities_accounts = load_or_migrate_data("liabilities_accounts", [])
-if "history_snapshots" not in st.session_state:
-    snapshots = load_or_migrate_data("history_snapshots", {})
-    if "2026-08-01" in snapshots:
-        del snapshots["2026-08-01"]
-        save_data("history_snapshots", snapshots)
-    st.session_state.history_snapshots = snapshots
+if "history_snapshots" not in st.session_state: st.session_state.history_snapshots = load_or_migrate_data("history_snapshots", {})
 
-# 狀態管理初始化
+# 狀態管理
 if "selected_category" not in st.session_state: st.session_state.selected_category = None
 if "editing_id" not in st.session_state: st.session_state.editing_id = None
 if "edit_cash_id" not in st.session_state: st.session_state.edit_cash_id = None
@@ -156,7 +141,6 @@ btc_usd = get_rate("BTC-USD") or 95000.0
 
 EXTRA_RATES = {"EUR/TWD": "EURTWD=X", "JPY/TWD": "JPYTWD=X", "GBP/TWD": "GBPTWD=X", "BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"}
 
-# 💡 優化抓價邏輯：自動精準判斷台灣 ETF 與股票，優先使用 .TW 與 .TWO
 def get_latest_price(ticker: str):
     if not ticker: return None
     ticker = ticker.strip().upper()
@@ -177,14 +161,12 @@ def get_latest_price(ticker: str):
                 if price is not None and not pd.isna(price) and price > 0: return round(float(price), 4)
             except Exception: pass
             try:
-                # 💡 強制 auto_adjust=False 以獲取未還原的真實收盤價
                 hist = stock.history(period="1mo", auto_adjust=False)
                 if not hist.empty: return round(float(hist["Close"].dropna().iloc[-1]), 4)
             except Exception: pass
         except Exception: continue
     return None
 
-# 💡 歷史資料也同步優化抓價邏輯
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_historical_prices_for_chart(ticker: str, start_date: pd.Timestamp):
     if not ticker: return pd.DataFrame()
@@ -201,7 +183,6 @@ def get_historical_prices_for_chart(ticker: str, start_date: pd.Timestamp):
     for sym in candidates:
         try:
             stock = yf.Ticker(sym)
-            # 💡 強制 auto_adjust=False 以獲取未還原的真實收盤價
             hist = stock.history(start=start_date, auto_adjust=False)
             if not hist.empty:
                 hist.index = hist.index.tz_localize(None).normalize()
@@ -355,7 +336,9 @@ def render_liability_manager(unit, display_currency, total_value, net_value):
             lib_total_display = lib_df["顯示金額"].sum()
 
         safe_unit = unit.replace("$", "&#36;")
-        st.markdown(f"<div style='font-size: 22px; font-weight: bold; margin-bottom: 15px;'>負債總額： {mask_val(f'{safe_unit} {fmt_total(lib_total_display, display_currency)}')} <span style='font-size: 18px; color: #94a3b8; font-weight: normal;'>｜ 槓桿比率： {mask_val(f'{total_value / net_value:.2f} 倍' if net_value > 0 else 'N/A')}</span></div>", unsafe_allow_html=True)
+        lib_str = f"{safe_unit} {fmt_total(lib_total_display, display_currency)}"
+        lev_str = f"{total_value / net_value:.2f} 倍" if net_value > 0 else 'N/A'
+        st.markdown(f"<div style='font-size: 22px; font-weight: bold; margin-bottom: 15px;'>負債總額： {mask_val(lib_str)} <span style='font-size: 18px; color: #94a3b8; font-weight: normal;'>｜ 槓桿比率： {mask_val(lev_str)}</span></div>", unsafe_allow_html=True)
         
         with st.form("liability_form", clear_on_submit=True):
             c1, c2, c3, c4 = st.columns([2, 1, 2, 1])
@@ -457,7 +440,6 @@ st.divider()
 with st.sidebar:
     st.header("新增交易")
     
-    # 清空表單與輸入記憶狀態
     if st.session_state.clear_form:
         st.session_state["name_input"] = ""
         st.session_state["ticker_input"] = ""
@@ -467,7 +449,6 @@ with st.sidebar:
         st.session_state["prev_ticker_input"] = ""
         st.session_state.clear_form = False
 
-    # 💡 建立台股常用名稱轉換字典 (擴充版：包含正2 ETF)
     TW_STOCK_MAP = {
         "元大台灣50": "0050", "元大中型100": "0051", "富邦科技": "0052", 
         "元大高股息": "0056", "富邦台50": "006208", "富邦公司治理": "00692", 
@@ -759,7 +740,8 @@ else:
     if is_category_view:
         view_df = df_chart[df_chart["類型"] == st.session_state.selected_category].copy()
         cat_total_val = fmt_total(view_df['顯示現值'].sum(), display_currency)
-        st.markdown(f"目前顯示：**{st.session_state.selected_category}** 分類總額 {mask_val(f'{unit.replace('$', '&#36;')} {cat_total_val}')}", unsafe_allow_html=True)
+        cat_total_str = f"{unit.replace('$', '&#36;')} {cat_total_val}"
+        st.markdown(f"目前顯示：**{st.session_state.selected_category}** 分類總額 {mask_val(cat_total_str)}", unsafe_allow_html=True)
     else:
         view_df = df_chart.groupby("類型", as_index=False)["顯示現值"].sum().rename(columns={"類型": "名稱"})
 
@@ -889,12 +871,58 @@ else:
         start_date = today_dt - pd.DateOffset(months=1) if time_range == "1個月" else today_dt - pd.DateOffset(months=3) if time_range == "3個月" else today_dt - pd.DateOffset(months=6) if time_range == "半年" else today_dt - pd.DateOffset(years=1) if time_range == "1年" else hist_df['Date'].min() - pd.Timedelta(days=3)
         end_date = today_dt + pd.Timedelta(days=1)
 
-        filtered_df = hist_df[hist_df['Date'] >= start_date]
+        filtered_df = hist_df[hist_df['Date'] >= start_date].copy()
+        filtered_df['PnL'] = filtered_df['Value'] - filtered_df['Cost']
+        
+        unit_str = unit.replace("$", "&#36;")
+        filtered_df['pnl_text'] = filtered_df['PnL'].apply(lambda x: f"<span style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>" if x < 0 else f"<span style='color:#4ade80'>+{unit_str} {x:,.0f}</span>" if x > 0 else f"{unit_str} 0")
+
+        filtered_df['Value_Gain'] = filtered_df[['Value', 'Cost']].max(axis=1)
+        filtered_df['Value_Loss'] = filtered_df[['Value', 'Cost']].min(axis=1)
+        filtered_df['pnl_y'] = filtered_df[['Value', 'Cost']].min(axis=1) - 1
+
         if not filtered_df.empty:
             fig_line = go.Figure()
-            hover_temp = "%{x|%Y-%m-%d}<br>＊＊＊＊<extra></extra>" if privacy else "%{x|%Y-%m-%d}<br>" + unit.replace("$", "&#36;") + " %{y:,.0f}<extra></extra>"
-            fig_line.add_trace(go.Scatter(x=filtered_df['Date'], y=filtered_df['Value'], mode='lines+markers', name='淨額' if st.session_state.selected_category is not None else '淨資產', line=dict(color='#00CC96', width=3, shape='linear'), marker=dict(size=6, color='#00CC96'), fill='tozeroy', fillcolor='rgba(0, 204, 150, 0.1)', hovertemplate=hover_temp))
-            fig_line.add_trace(go.Scatter(x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines+markers', name='成本', line=dict(color='#3b82f6', width=3, shape='linear'), marker=dict(size=6, color='#3b82f6'), hovertemplate=hover_temp))
+            
+            if privacy:
+                hover_temp_val = "＊＊＊＊<extra></extra>"
+                hover_temp_cost = "＊＊＊＊<extra></extra>"
+                hover_temp_pnl = "＊＊＊＊<extra></extra>"
+            else:
+                hover_temp_val = unit_str + " %{y:,.0f}<extra></extra>"
+                hover_temp_cost = unit_str + " %{y:,.0f}<extra></extra>"
+                hover_temp_pnl = "%{customdata}<extra></extra>"
+
+            # 1. 隱形的損益軌跡 (顯示在 Tooltip 最下方)
+            fig_line.add_trace(go.Scatter(
+                x=filtered_df['Date'], y=filtered_df['pnl_y'], mode='lines', name='損益', 
+                line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_text'] if not privacy else None, 
+                hovertemplate=hover_temp_pnl, showlegend=False
+            ))
+
+            # 2. 成本線
+            fig_line.add_trace(go.Scatter(
+                x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines+markers', name='成本', 
+                line=dict(color='#3b82f6', width=3, shape='linear'), marker=dict(size=6, color='#3b82f6'), 
+                hovertemplate=hover_temp_cost
+            ))
+            
+            # 3. 淨資產線
+            fig_line.add_trace(go.Scatter(
+                x=filtered_df['Date'], y=filtered_df['Value'], mode='lines+markers', 
+                name='淨額' if st.session_state.selected_category is not None else '淨資產', 
+                line=dict(color='#00CC96', width=3, shape='linear'), marker=dict(size=6, color='#00CC96'), 
+                hovertemplate=hover_temp_val
+            ))
+
+            # 4. 獲利填色區間 (黃色)
+            fig_line.add_trace(go.Scatter(x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines', line=dict(width=0), hoverinfo='skip', showlegend=False))
+            fig_line.add_trace(go.Scatter(x=filtered_df['Date'], y=filtered_df['Value_Gain'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(255, 193, 7, 0.2)', hoverinfo='skip', showlegend=False))
+
+            # 5. 虧損填色區間 (紅色)
+            fig_line.add_trace(go.Scatter(x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines', line=dict(width=0), hoverinfo='skip', showlegend=False))
+            fig_line.add_trace(go.Scatter(x=filtered_df['Date'], y=filtered_df['Value_Loss'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(239, 68, 68, 0.2)', hoverinfo='skip', showlegend=False))
+
             fig_line.update_layout(margin=dict(t=20, b=20, l=10, r=10), height=350, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(range=[start_date, end_date], showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d", type="date"), yaxis=dict(showgrid=True, gridcolor="#333333", tickfont=dict(color="#e2e8f0"), zeroline=False, showticklabels=not privacy, autorange=True), hovermode="x unified", dragmode="pan")
             st.plotly_chart(fig_line, use_container_width=True, config={'scrollZoom': True})
         else: st.info("所選時間區間內尚無歷史快照資料。")
@@ -916,10 +944,10 @@ else:
             "股息": detail_df.apply(lambda r: None if r.get("is_cash") else r["股息"], axis=1),
             "SP權利金": detail_df.apply(lambda r: None if r.get("is_cash") else r["SP權利金"], axis=1),
             "CC權利金": detail_df.apply(lambda r: None if r.get("is_cash") else r["CC權利金"], axis=1),
-            "已實現總損益": detail_df.apply(lambda r: None if r.get("is_cash") else r["已實現損益"], axis=1)
+            "已實現損益": detail_df.apply(lambda r: None if r.get("is_cash") else r["已實現損益"], axis=1)
         })
 
-        all_cols = ["名稱", "代號", "類型", "幣別", "數量", "平均成本", "調整後成本", "現價", "現值", "未實現損益", "股息", "SP權利金", "CC權利金", "已實現總損益"]
+        all_cols = ["名稱", "代號", "類型", "幣別", "數量", "平均成本", "調整後成本", "現價", "現值", "未實現損益", "股息", "SP權利金", "CC權利金", "已實現損益"]
         if is_category_view:
             if st.session_state.selected_category == "美股":
                 display_cols = all_cols
@@ -948,7 +976,7 @@ else:
                 "股息": st.column_config.NumberColumn("股息", format="%.0f"),
                 "SP權利金": st.column_config.NumberColumn("SP權利金", format="%.0f"),
                 "CC權利金": st.column_config.NumberColumn("CC權利金", format="%.0f"),
-                "已實現總損益": st.column_config.NumberColumn("已實現總損益", format="%.0f")
+                "已實現損益": st.column_config.NumberColumn("已實現損益", format="%.0f")
             }
             st.dataframe(show_df, use_container_width=True, hide_index=True, column_config=col_cfg)
 
@@ -995,18 +1023,18 @@ else:
         )
         
         if selected_analysis_target:
+            include_premium_individual = st.checkbox("此標的圖表計算包含權利金/配息降本", value=st.session_state.get("include_premium", False), key="include_premium_ind")
+
             with st.spinner(f"正在載入 {selected_analysis_target} 的歷史資料並回推圖表..."):
                 asset_tx = tx_df_analysis[tx_df_analysis["target_label"] == selected_analysis_target].sort_values("date_obj").copy()
                 ticker_to_fetch = asset_tx.iloc[0]["ticker"]
                 asset_currency = asset_tx.iloc[0]["currency"]
                 
-                # 取得歷史價格
                 hist_df = pd.DataFrame()
                 if ticker_to_fetch:
                     start_dt = asset_tx["date_obj"].min() - pd.Timedelta(days=7)
                     hist_df = get_historical_prices_for_chart(ticker_to_fetch, start_dt)
                 
-                # 準備日曆
                 first_trade_date = asset_tx["date_obj"].min()
                 calendar = pd.date_range(start=first_trade_date, end=pd.to_datetime(date.today()))
                 daily_data = pd.DataFrame(index=calendar)
@@ -1037,12 +1065,14 @@ else:
                                     if current_shares < 1e-5:
                                         current_shares, current_cost = 0.0, 0.0
                             elif action in ["Sell Put", "Covered Call", "配息"]:
-                                if st.session_state.get("include_premium", False):
+                                if include_premium_individual:
                                     current_cost -= price
                     
                     daily_data.loc[d, "shares"] = current_shares
                     daily_data.loc[d, "cost"] = current_cost
                 
+                daily_data["avg_cost"] = daily_data.apply(lambda r: r["cost"] / r["shares"] if r["shares"] > 1e-5 else None, axis=1)
+
                 if not hist_df.empty:
                     daily_data = daily_data.join(hist_df["Close"])
                     daily_data["Close"] = daily_data["Close"].ffill()
@@ -1051,18 +1081,60 @@ else:
                     daily_data["Close"] = None
                     daily_data["Value"] = daily_data["cost"] 
                 
+                daily_data["pnl"] = daily_data["Value"] - daily_data["cost"]
+                
+                currency_symbols = {"TWD": "NT&#36;", "USD": "US&#36;", "BTC": "BTC"}
+                asset_unit_str = currency_symbols.get(asset_currency, asset_currency)
+
+                daily_data["pnl_text"] = daily_data["pnl"].apply(lambda x: f"<span style='color:#ef4444'>-{asset_unit_str} {abs(x):,.0f}</span>" if x < 0 else f"<span style='color:#4ade80'>+{asset_unit_str} {x:,.0f}</span>" if x > 0 else f"{asset_unit_str} 0")
+
+                daily_data['Value_Gain'] = daily_data[['Value', 'cost']].max(axis=1)
+                daily_data['Value_Loss'] = daily_data[['Value', 'cost']].min(axis=1)
+                daily_data['pnl_y'] = daily_data[['Value', 'cost']].min(axis=1) - 1
+
                 st.markdown(f"*(註: 以下圖表皆以該標的原始計價幣別 **{asset_currency}** 呈現，不受匯率波動影響)*")
                 
                 c_chart1, c_chart2 = st.columns(2)
                 
-                # ------ 圖表 1: 持倉現值 vs 成本 ------
                 with c_chart1:
                     st.markdown("<div style='text-align:center; color:#94a3b8; font-size:15px; margin-bottom:10px; font-weight:600;'>📊 持倉現值與成本變化</div>", unsafe_allow_html=True)
                     fig1 = go.Figure()
-                    hover_temp1 = "%{x|%Y-%m-%d}<br>＊＊＊＊<extra></extra>" if privacy else "%{x|%Y-%m-%d}<br>金額: %{y:,.2f}<extra></extra>"
                     
-                    fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['Value'], mode='lines', name='持倉現值', line=dict(color='#00CC96', width=2), fill='tozeroy', fillcolor='rgba(0, 204, 150, 0.1)', hovertemplate=hover_temp1))
-                    fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['cost'], mode='lines', name='投入成本', line=dict(color='#3b82f6', width=2), hovertemplate=hover_temp1))
+                    if privacy:
+                        hover_val = "＊＊＊＊<extra></extra>"
+                        hover_cost = "＊＊＊＊<extra></extra>"
+                        hover_pnl = "＊＊＊＊<extra></extra>"
+                    else:
+                        hover_val = asset_unit_str + " %{y:,.0f}<extra></extra>"
+                        hover_cost = asset_unit_str + " %{y:,.0f}<extra></extra>"
+                        hover_pnl = "%{customdata}<extra></extra>"
+                    
+                    # 1. 隱形的損益軌跡 (顯示在 Tooltip 最下方)
+                    fig1.add_trace(go.Scatter(
+                        x=daily_data.index, y=daily_data['pnl_y'], mode='lines', name='損益', 
+                        line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_text'] if not privacy else None, 
+                        hovertemplate=hover_pnl, showlegend=False
+                    ))
+
+                    # 2. 成本線
+                    fig1.add_trace(go.Scatter(
+                        x=daily_data.index, y=daily_data['cost'], mode='lines', name='成本', 
+                        line=dict(color='#3b82f6', width=2), hovertemplate=hover_cost
+                    ))
+                    
+                    # 3. 淨值線
+                    fig1.add_trace(go.Scatter(
+                        x=daily_data.index, y=daily_data['Value'], mode='lines', name='持倉現值', 
+                        line=dict(color='#00CC96', width=2), hovertemplate=hover_val
+                    ))
+
+                    # 4. 獲利填色區間 (黃色)
+                    fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['cost'], mode='lines', line=dict(width=0), hoverinfo='skip', showlegend=False))
+                    fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['Value_Gain'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(255, 193, 7, 0.2)', hoverinfo='skip', showlegend=False))
+
+                    # 5. 虧損填色區間 (紅色)
+                    fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['cost'], mode='lines', line=dict(width=0), hoverinfo='skip', showlegend=False))
+                    fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['Value_Loss'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(239, 68, 68, 0.2)', hoverinfo='skip', showlegend=False))
                     
                     fig1.update_layout(
                         margin=dict(t=10, b=20, l=10, r=10), height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -1073,7 +1145,6 @@ else:
                     )
                     st.plotly_chart(fig1, use_container_width=True, config={'scrollZoom': True})
                 
-                # ------ 圖表 2: 價格走勢與交易點位 ------
                 with c_chart2:
                     st.markdown("<div style='text-align:center; color:#94a3b8; font-size:15px; margin-bottom:10px; font-weight:600;'>🎯 價格走勢與交易點位</div>", unsafe_allow_html=True)
                     if hist_df.empty:
@@ -1082,6 +1153,9 @@ else:
                         fig2 = go.Figure()
                         hover_temp2 = "%{x|%Y-%m-%d}<br>＊＊＊＊<extra></extra>" if privacy else "%{x|%Y-%m-%d}<br>收盤價: %{y:,.2f}<extra></extra>"
                         fig2.add_trace(go.Scatter(x=hist_df.index, y=hist_df['Close'], mode='lines', name='收盤價', line=dict(color='#94a3b8', width=2), hovertemplate=hover_temp2))
+                        
+                        hover_temp_avg = "%{x|%Y-%m-%d}<br>＊＊＊＊<extra></extra>" if privacy else "%{x|%Y-%m-%d}<br>平均成本: %{y:,.2f}<extra></extra>"
+                        fig2.add_trace(go.Scatter(x=daily_data.index, y=daily_data['avg_cost'], mode='lines', name='平均成本', line=dict(color='#FFA15A', width=2, dash='dash'), hovertemplate=hover_temp_avg, connectgaps=False))
                         
                         buys = asset_tx[asset_tx['type'] == '買進'].copy()
                         sells = asset_tx[asset_tx['type'] == '賣出'].copy()
