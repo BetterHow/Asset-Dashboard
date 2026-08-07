@@ -884,7 +884,6 @@ else:
         filtered_df['Value_Gain'] = filtered_df[['Value', 'Cost']].max(axis=1)
         filtered_df['Value_Loss'] = filtered_df[['Value', 'Cost']].min(axis=1)
         
-        # 動態計算 offset，確保 Y 軸排列順序完美
         y_max = filtered_df[['Value', 'Cost']].max().max()
         y_min = filtered_df[['Value', 'Cost']].min().min()
         y_range = y_max - y_min
@@ -904,19 +903,18 @@ else:
         if not filtered_df.empty:
             fig_line = go.Figure()
             
-            val_name = '淨值' 
+            val_name = '淨值'
             
             if privacy:
                 hover_temp_val = "＊＊＊＊<extra>" + val_name + "</extra>"
                 hover_temp_cost = "＊＊＊＊<extra>成本</extra>"
                 hover_temp_pnl = "＊＊＊＊<extra>損益</extra>"
-                hover_temp_pct = "＊＊＊＊<extra>&nbsp;</extra>"
+                hover_temp_pct = "＊＊＊＊<extra><span style='color:rgba(0,0,0,0)'>百分</span></extra>"
             else:
-                # 💡 利用原生表格對齊：<extra> 放左欄，不要手動寫死冒號字串
                 hover_temp_val = unit_str + " %{y:,.0f}<extra>" + val_name + "</extra>"
                 hover_temp_cost = unit_str + " %{y:,.0f}<extra>成本</extra>"
                 hover_temp_pnl = "%{customdata}<extra>損益</extra>"
-                hover_temp_pct = "%{customdata}<extra>&nbsp;</extra>"
+                hover_temp_pct = "%{customdata}<extra><span style='color:rgba(0,0,0,0)'>百分</span></extra>"
 
             # 1. 隱形軌跡：百分比 (Row 4) -> 顯示在最底
             fig_line.add_trace(go.Scatter(
@@ -1175,13 +1173,12 @@ else:
                         hover_val = "＊＊＊＊<extra>" + val_name_ind + "</extra>"
                         hover_cost = "＊＊＊＊<extra>成本</extra>"
                         hover_pnl = "＊＊＊＊<extra>損益</extra>"
-                        hover_pct = "＊＊＊＊<extra>&nbsp;</extra>"
+                        hover_pct = "＊＊＊＊<extra><span style='color:rgba(0,0,0,0)'>百分</span></extra>"
                     else:
-                        # 💡 完美切齊魔法：把多餘的冒號字串拔掉，讓 Plotly 原生的冒號自動對齊生效！
                         hover_val = asset_unit_str + " %{y:,.0f}<extra>" + val_name_ind + "</extra>"
                         hover_cost = asset_unit_str + " %{y:,.0f}<extra>成本</extra>"
                         hover_pnl = "%{customdata}<extra>損益</extra>"
-                        hover_pct = "%{customdata}<extra>&nbsp;</extra>"
+                        hover_pct = "%{customdata}<extra><span style='color:rgba(0,0,0,0)'>百分</span></extra>"
                     
                     # 1. 隱形軌跡：百分比 (Row 4)
                     fig1.add_trace(go.Scatter(
