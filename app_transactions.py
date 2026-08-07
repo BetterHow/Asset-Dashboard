@@ -79,15 +79,14 @@ def load_or_migrate_data(sheet_name, default_val):
         pass
     return default_val
 
-# ========================================================
-# 📊 狀態管理與初始化
-# ========================================================
+# 初始化載入資料
 if "transactions" not in st.session_state: st.session_state.transactions = load_or_migrate_data("transactions", [])
 if "manual_prices" not in st.session_state: st.session_state.manual_prices = load_or_migrate_data("manual_prices", {})
 if "cash_accounts" not in st.session_state: st.session_state.cash_accounts = load_or_migrate_data("cash_accounts", [])
 if "liabilities_accounts" not in st.session_state: st.session_state.liabilities_accounts = load_or_migrate_data("liabilities_accounts", [])
 if "history_snapshots" not in st.session_state: st.session_state.history_snapshots = load_or_migrate_data("history_snapshots", {})
 
+# 狀態管理
 if "selected_category" not in st.session_state: st.session_state.selected_category = None
 if "editing_id" not in st.session_state: st.session_state.editing_id = None
 if "edit_cash_id" not in st.session_state: st.session_state.edit_cash_id = None
@@ -912,7 +911,7 @@ else:
                 hover_temp_pnl = "＊＊＊＊<extra></extra>"
                 hover_temp_pct = "＊＊＊＊<extra></extra>"
             else:
-                # 💡 完美切齊魔法：把多餘的冒號刪掉，讓 Plotly 原生的冒號自動對齊生效！
+                # 💡 完美切齊魔法：把多餘的冒號字串拔掉，讓 Plotly 原生的冒號自動生效！
                 hover_temp_val = unit_str + " %{y:,.0f}"
                 hover_temp_cost = unit_str + " %{y:,.0f}"
                 hover_temp_pnl = "%{customdata}"
@@ -1177,7 +1176,7 @@ else:
                         hover_pnl = "＊＊＊＊"
                         hover_pct = "＊＊＊＊"
                     else:
-                        # 💡 完全拿掉手動輸入的冒號，讓 Plotly 的表格自動對齊生效
+                        # 💡 完美切齊魔法：拿掉手動寫死的冒號，交給 Plotly 原生渲染！
                         hover_val = asset_unit_str + " %{y:,.0f}"
                         hover_cost = asset_unit_str + " %{y:,.0f}"
                         hover_pnl = "%{customdata}"
@@ -1317,7 +1316,7 @@ else:
                     with c1: new_date = st.date_input("日期", value=date.fromisoformat(row["date"]), key=f"ed_d_{row['id']}", label_visibility="collapsed")
                     with c2: 
                         type_options_list = ["買進", "賣出", "Sell Put", "Covered Call", "配息"]
-                        current_type_idx = type_options_list.index(row["type"]) if row["type in type_options_list else 0
+                        current_type_idx = type_options_list.index(row["type"]) if row["type"] in type_options_list else 0
                         new_type = st.selectbox("動作", type_options_list, index=current_type_idx, key=f"ed_t_{row['id']}", label_visibility="collapsed")
                     with c3:
                         cc1, cc2 = st.columns([1.5, 1])
