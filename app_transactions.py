@@ -393,7 +393,7 @@ def render_liability_manager(unit, display_currency, total_value, net_value):
                     if not lib_hist_df.empty:
                         fig_lib_line = go.Figure()
                         hover_temp = "%{x|%Y-%m-%d}<br>＊＊＊＊<extra></extra>" if st.session_state.privacy_mode else "%{x|%Y-%m-%d}<br>" + safe_unit + " %{y:,.0f}<extra></extra>"
-                        fig_lib_line.add_trace(go.Scatter(x=lib_hist_df['Date'], y=lib_hist_df['Value'], mode='lines', name='負債總額', line=dict(color='#EF553B', width=3, shape='linear'), fill='tozeroy', fillcolor='rgba(239, 85, 59, 0.1)', hovertemplate=hover_temp))
+                        fig_lib_line.add_trace(go.Scatter(x=lib_hist_df['Date'], y=lib_hist_df['Value'], mode='lines+markers', name='負債總額', line=dict(color='#EF553B', width=3, shape='linear'), marker=dict(size=6, color='#EF553B'), fill='tozeroy', fillcolor='rgba(239, 85, 59, 0.1)', hovertemplate=hover_temp))
                         today_dt = pd.to_datetime(date.today())
                         start_date = today_dt - pd.DateOffset(months=1) if len(lib_hist_df) <= 30 else lib_hist_df['Date'].min() - pd.Timedelta(days=3)
                         fig_lib_line.update_layout(margin=dict(t=10, b=20, l=10, r=10), height=280, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(range=[start_date, today_dt + pd.Timedelta(days=1)], showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d", type="date"), yaxis=dict(showgrid=True, gridcolor="#333333", tickfont=dict(color="#e2e8f0"), zeroline=False, showticklabels=not st.session_state.privacy_mode), hovermode="x unified", dragmode="pan")
@@ -428,6 +428,15 @@ if st.session_state.selected_extras:
 st.divider()
 
 with st.sidebar:
+    st.markdown(f"<div style='color: #4ade80; font-size: 14px; font-weight: bold; margin-bottom: 5px;'>🔓 已登入：{st.session_state.user.email}</div>", unsafe_allow_html=True)
+    if st.button("登出金庫", use_container_width=True):
+        supabase.auth.sign_out()
+        st.session_state.user = None
+        st.session_state.password = None
+        st.cache_data.clear()
+        st.rerun()
+    st.divider()
+    
     st.header("新增交易")
     
     if st.session_state.clear_form:
@@ -450,7 +459,7 @@ with st.sidebar:
         "元大台灣50正2": "00631L", "富邦台灣加權正2": "00675L", "國泰台灣加權正2": "00663L",
         "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "廣達": "2382", 
         "台達電": "2308", "中華電": "2412", "日月光投控": "3711", "聯電": "2303", 
-        "華碩": "2357", "宏碁": "2353", "技嘉": "2376", "微星": "2377", 
+        "华碩": "2357", "宏碁": "2353", "技嘉": "2376", "微星": "2377", 
         "緯創": "3231", "緯穎": "6669", "英業達": "2356", "和碩": "4938", 
         "光寶科": "2301", "研華": "2395", "奇鋐": "3017", "雙鴻": "3324", 
         "智邦": "2345", "瑞昱": "2379", "聯詠": "3034", "國巨": "2327", 
@@ -907,53 +916,53 @@ else:
             val_name = '淨額' if st.session_state.selected_category is not None else '淨資產'
             
             if privacy:
-                hover_temp_val = " : ＊＊＊＊<extra>" + val_name + "</extra>"
-                hover_temp_cost = " : ＊＊＊＊<extra>成本</extra>"
-                hover_temp_pnl = " : ＊＊＊＊<extra>損益</extra>"
-                hover_temp_pct = " : ＊＊＊＊<extra>百分比</extra>"
+                hover_temp_val = "＊＊＊＊"
+                hover_temp_cost = "＊＊＊＊"
+                hover_temp_pnl = "＊＊＊＊"
+                hover_temp_pct = "＊＊＊＊"
             else:
-                # 💡 完美切齊魔法：把名稱放進 <extra>，冒號綁死在數值欄（左側）的最開頭
-                hover_temp_val = " : " + unit_str + " %{y:,.0f}<extra>" + val_name + "</extra>"
-                hover_temp_cost = " : " + unit_str + " %{y:,.0f}<extra>成本</extra>"
-                hover_temp_pnl = " : %{customdata}<extra>損益</extra>"
-                hover_temp_pct = " : %{customdata}<extra>百分比</extra>"
+                # 💡 利用原生表格對齊：<extra> 在左，數值在右。冒號直接放在右側字串的最前面！
+                hover_temp_val = " : " + unit_str + " %{y:,.0f}"
+                hover_temp_cost = " : " + unit_str + " %{y:,.0f}"
+                hover_temp_pnl = " : %{customdata}"
+                hover_temp_pct = " : %{customdata}"
 
-            # 1. 隱形軌跡：百分比 (Row 4)
+            # 1. 隱形軌跡：百分比 (Row 4) -> 顯示在最底
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['pct_y_gain'], mode='lines', name='百分比', 
-                line=dict(color='#4ade80', width=0), customdata=filtered_df['pnl_pct_text'] if not privacy else None, 
+                line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_pct_text'] if not privacy else None, 
                 hovertemplate=hover_temp_pct, showlegend=False, connectgaps=False
             ))
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['pct_y_loss'], mode='lines', name='百分比', 
-                line=dict(color='#ef4444', width=0), customdata=filtered_df['pnl_pct_text'] if not privacy else None, 
+                line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_pct_text'] if not privacy else None, 
                 hovertemplate=hover_temp_pct, showlegend=False, connectgaps=False
             ))
 
-            # 2. 隱形軌跡：損益金額 (Row 3)
+            # 2. 隱形軌跡：損益金額 (Row 3) -> 顯示在第三排
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['pnl_y_gain'], mode='lines', name='損益', 
-                line=dict(color='#4ade80', width=0), customdata=filtered_df['pnl_val_text'] if not privacy else None, 
+                line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_val_text'] if not privacy else None, 
                 hovertemplate=hover_temp_pnl, showlegend=False, connectgaps=False
             ))
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['pnl_y_loss'], mode='lines', name='損益', 
-                line=dict(color='#ef4444', width=0), customdata=filtered_df['pnl_val_text'] if not privacy else None, 
+                line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_val_text'] if not privacy else None, 
                 hovertemplate=hover_temp_pnl, showlegend=False, connectgaps=False
             ))
 
-            # 3. 成本線
+            # 3. 成本線 (Row 2) -> 顯示在第二排
             fig_line.add_trace(go.Scatter(
-                x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines', name='成本', 
-                line=dict(color='#3b82f6', width=3, shape='linear'), 
+                x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines+markers', name='成本', 
+                line=dict(color='#3b82f6', width=3, shape='linear'), marker=dict(size=6, color='#3b82f6'), 
                 hovertemplate=hover_temp_cost
             ))
             
-            # 4. 淨資產線
+            # 4. 淨資產線 (Row 1) -> 顯示在最上面
             fig_line.add_trace(go.Scatter(
-                x=filtered_df['Date'], y=filtered_df['Value'], mode='lines', 
+                x=filtered_df['Date'], y=filtered_df['Value'], mode='lines+markers', 
                 name=val_name, 
-                line=dict(color='#00CC96', width=3, shape='linear'), 
+                line=dict(color='#00CC96', width=3, shape='linear'), marker=dict(size=6, color='#00CC96'), 
                 hovertemplate=hover_temp_val
             ))
 
@@ -1172,37 +1181,38 @@ else:
                     
                     val_name_ind = '淨額'
                     if privacy:
-                        hover_val = f" : ＊＊＊＊<extra>{val_name_ind}</extra>"
-                        hover_cost = " : ＊＊＊＊<extra>成本</extra>"
-                        hover_pnl = " : ＊＊＊＊<extra>損益</extra>"
-                        hover_pct = " : ＊＊＊＊<extra>百分比</extra>"
+                        hover_val = "＊＊＊＊"
+                        hover_cost = "＊＊＊＊"
+                        hover_pnl = "＊＊＊＊"
+                        hover_pct = "＊＊＊＊"
                     else:
-                        hover_val = " : " + asset_unit_str + f" %{{y:,.0f}}<extra>{val_name_ind}</extra>"
-                        hover_cost = " : " + asset_unit_str + " %{y:,.0f}<extra>成本</extra>"
-                        hover_pnl = " : %{customdata}<extra>損益</extra>"
-                        hover_pct = " : %{customdata}<extra>百分比</extra>"
+                        # 💡 利用原生表格對齊：<extra> 放空，冒號直接放在右側字串的最前面
+                        hover_val = " : " + asset_unit_str + " %{y:,.0f}"
+                        hover_cost = " : " + asset_unit_str + " %{y:,.0f}"
+                        hover_pnl = " : %{customdata}"
+                        hover_pct = " : %{customdata}"
                     
                     # 1. 隱形軌跡：百分比 (Row 4)
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['pct_y_gain'], mode='lines', name='百分比', 
-                        line=dict(color='#4ade80', width=0), customdata=daily_data['pnl_pct_text'] if not privacy else None, 
+                        line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_pct_text'] if not privacy else None, 
                         hovertemplate=hover_pct, showlegend=False, connectgaps=False
                     ))
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['pct_y_loss'], mode='lines', name='百分比', 
-                        line=dict(color='#ef4444', width=0), customdata=daily_data['pnl_pct_text'] if not privacy else None, 
+                        line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_pct_text'] if not privacy else None, 
                         hovertemplate=hover_pct, showlegend=False, connectgaps=False
                     ))
 
                     # 2. 隱形軌跡：損益金額 (Row 3)
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['pnl_y_gain'], mode='lines', name='損益', 
-                        line=dict(color='#4ade80', width=0), customdata=daily_data['pnl_val_text'] if not privacy else None, 
+                        line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_val_text'] if not privacy else None, 
                         hovertemplate=hover_pnl, showlegend=False, connectgaps=False
                     ))
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['pnl_y_loss'], mode='lines', name='損益', 
-                        line=dict(color='#ef4444', width=0), customdata=daily_data['pnl_val_text'] if not privacy else None, 
+                        line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_val_text'] if not privacy else None, 
                         hovertemplate=hover_pnl, showlegend=False, connectgaps=False
                     ))
 
@@ -1241,10 +1251,10 @@ else:
                         st.warning("無法取得此標的之歷史報價，僅能繪製成本變化圖。")
                     else:
                         fig2 = go.Figure()
-                        hover_temp2 = "%{x|%Y-%m-%d}<br>＊＊＊＊<extra></extra>" if privacy else "%{x|%Y-%m-%d}<br>收盤價: %{y:,.2f}<extra></extra>"
+                        hover_temp2 = " : %{y:,.2f}<extra></extra>" if not privacy else " : ＊＊＊＊<extra></extra>"
                         fig2.add_trace(go.Scatter(x=hist_df.index, y=hist_df['Close'], mode='lines', name='收盤價', line=dict(color='#94a3b8', width=2), hovertemplate=hover_temp2))
                         
-                        hover_temp_avg = "%{x|%Y-%m-%d}<br>＊＊＊＊<extra></extra>" if privacy else "%{x|%Y-%m-%d}<br>平均成本: %{y:,.2f}<extra></extra>"
+                        hover_temp_avg = " : %{y:,.2f}<extra></extra>" if not privacy else " : ＊＊＊＊<extra></extra>"
                         fig2.add_trace(go.Scatter(x=daily_data.index, y=daily_data['avg_cost'], mode='lines', name='平均成本', line=dict(color='#FFA15A', width=2, dash='dash'), hovertemplate=hover_temp_avg, connectgaps=False))
                         
                         buys = asset_tx[asset_tx['type'] == '買進'].copy()
@@ -1263,7 +1273,7 @@ else:
                             fig2.add_trace(go.Scatter(
                                 x=buys['date_obj'], y=buys['price'], mode='markers', name='買進',
                                 marker=dict(color='#4ade80', size=sizes, line=dict(width=1, color='white')),
-                                customdata=buys['hover'], hovertemplate="%{customdata}<extra></extra>"
+                                customdata=buys['hover'], hovertemplate="<br>%{customdata}<extra></extra>"
                             ))
                             
                         if not sells.empty:
@@ -1272,7 +1282,7 @@ else:
                             fig2.add_trace(go.Scatter(
                                 x=sells['date_obj'], y=sells['price'], mode='markers', name='賣出',
                                 marker=dict(color='#ef4444', size=sizes, line=dict(width=1, color='white')),
-                                customdata=sells['hover'], hovertemplate="%{customdata}<extra></extra>"
+                                customdata=sells['hover'], hovertemplate="<br>%{customdata}<extra></extra>"
                             ))
                             
                         fig2.update_layout(
