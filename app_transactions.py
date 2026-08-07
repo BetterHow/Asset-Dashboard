@@ -910,12 +910,13 @@ else:
                 hover_temp_val = "＊＊＊＊<extra>" + val_name + "</extra>"
                 hover_temp_cost = "＊＊＊＊<extra>成本</extra>"
                 hover_temp_pnl = "＊＊＊＊<extra>損益</extra>"
-                hover_temp_pct = "＊＊＊＊<extra>$$%</extra>"
+                hover_temp_pct = "＊＊＊＊<extra>$$ %</extra>"
             else:
-                hover_temp_val = " %{y:,.0f}<extra>" + val_name + "</extra>"
-                hover_temp_cost = " %{y:,.0f}<extra>成本</extra>"
+                # 💡 利用原生表格對齊：<extra> 放左欄，不要手動寫死冒號字串
+                hover_temp_val = unit_str + " %{y:,.0f}<extra>" + val_name + "</extra>"
+                hover_temp_cost = unit_str + " %{y:,.0f}<extra>成本</extra>"
                 hover_temp_pnl = "%{customdata}<extra>損益</extra>"
-                hover_temp_pct = "%{customdata}<extra>$$%</extra>"
+                hover_temp_pct = "%{customdata}<extra>$$ %</extra>"
 
             # 1. 隱形軌跡：百分比 (Row 4) -> 顯示在最底
             fig_line.add_trace(go.Scatter(
@@ -945,7 +946,7 @@ else:
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines', name='成本', 
                 line=dict(color='#3b82f6', width=3, shape='linear'), 
-                hovertemplate=unit_str + hover_temp_cost
+                hovertemplate=hover_temp_cost
             ))
             
             # 4. 淨資產線 (Row 1) -> 顯示在最上面
@@ -953,7 +954,7 @@ else:
                 x=filtered_df['Date'], y=filtered_df['Value'], mode='lines', 
                 name=val_name, 
                 line=dict(color='#00CC96', width=3, shape='linear'), 
-                hovertemplate=unit_str + hover_temp_val
+                hovertemplate=hover_temp_val
             ))
 
             # 5. 獲利填色區間 (黃色)
@@ -1174,12 +1175,13 @@ else:
                         hover_val = "＊＊＊＊<extra>" + val_name_ind + "</extra>"
                         hover_cost = "＊＊＊＊<extra>成本</extra>"
                         hover_pnl = "＊＊＊＊<extra>損益</extra>"
-                        hover_pct = "＊＊＊＊<extra>$$%</extra>"
+                        hover_pct = "＊＊＊＊<extra>$$ %</extra>"
                     else:
-                        hover_val = " %{y:,.0f}<extra>" + val_name_ind + "</extra>"
-                        hover_cost = " %{y:,.0f}<extra>成本</extra>"
+                        # 💡 完美切齊魔法：把多餘的冒號字串拔掉，讓 Plotly 原生的冒號自動對齊生效！
+                        hover_val = asset_unit_str + " %{y:,.0f}<extra>" + val_name_ind + "</extra>"
+                        hover_cost = asset_unit_str + " %{y:,.0f}<extra>成本</extra>"
                         hover_pnl = "%{customdata}<extra>損益</extra>"
-                        hover_pct = "%{customdata}<extra>$$%</extra>"
+                        hover_pct = "%{customdata}<extra>$$ %</extra>"
                     
                     # 1. 隱形軌跡：百分比 (Row 4)
                     fig1.add_trace(go.Scatter(
@@ -1208,13 +1210,13 @@ else:
                     # 3. 成本線
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['cost'], mode='lines', name='成本', 
-                        line=dict(color='#3b82f6', width=2), hovertemplate=asset_unit_str + hover_cost
+                        line=dict(color='#3b82f6', width=2), hovertemplate=hover_cost
                     ))
                     
                     # 4. 淨值線
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['Value'], mode='lines', name=val_name_ind, 
-                        line=dict(color='#00CC96', width=2), hovertemplate=asset_unit_str + hover_val
+                        line=dict(color='#00CC96', width=2), hovertemplate=hover_val
                     ))
 
                     # 5. 獲利填色區間 (黃色)
