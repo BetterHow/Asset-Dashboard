@@ -79,31 +79,7 @@ def load_or_migrate_data(sheet_name, default_val):
         pass
     return default_val
 
-# ========================================================
-# 📊 以下為正式 App 儀表板
-# ========================================================
-st.markdown(
-    """
-    <style>
-    section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; }
-    
-    /* 僅將側邊欄收折/展開按鈕設定為固定，避免誤傷右上角系統選單 */
-    div[data-testid="collapsedControl"], 
-    button[data-testid="stSidebarCollapseButton"] {
-        position: fixed !important; 
-        top: 10px !important; 
-        z-index: 999999;
-    }
-    div[data-testid="stButton"] button p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    div[data-testid="stTextInput"] div { padding-top: 0px; padding-bottom: 0px; }
-    </style>
-    """, unsafe_allow_html=True
-)
-
-st.title("📊 個人資產儀表板（交易紀錄版）")
-st.caption("支援買進 / 賣出 / SP / CC / 配息｜動態現金管理｜負債追蹤｜單一標的分析｜隱私保護")
-
-# 初始化載入資料 (從 Google Sheets)
+# 初始化載入資料
 if "transactions" not in st.session_state: st.session_state.transactions = load_or_migrate_data("transactions", [])
 if "manual_prices" not in st.session_state: st.session_state.manual_prices = load_or_migrate_data("manual_prices", {})
 if "cash_accounts" not in st.session_state: st.session_state.cash_accounts = load_or_migrate_data("cash_accounts", [])
@@ -274,6 +250,20 @@ def looks_like_ticker(text: str) -> bool:
     return bool(re.fullmatch(r"[A-Z0-9.\-]{1,15}", text.strip().upper()))
 
 def mask_val(val_str): return "＊＊＊＊" if st.session_state.privacy_mode else val_str
+
+# ========================================================
+# 📊 UI 渲染開始
+# ========================================================
+st.markdown(
+    """
+    <style>
+    section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; }
+    div[data-testid="collapsedControl"], button[data-testid="stSidebarCollapseButton"] { position: fixed !important; top: 10px !important; z-index: 999999; }
+    div[data-testid="stButton"] button p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    div[data-testid="stTextInput"] div { padding-top: 0px; padding-bottom: 0px; }
+    </style>
+    """, unsafe_allow_html=True
+)
 
 def render_cash_manager():
     st.markdown("#### 💵 現金帳戶管理")
@@ -875,7 +865,22 @@ else:
         filtered_df['PnL'] = filtered_df['Value'] - filtered_df['Cost']
         
         unit_str = unit.replace("$", "&#36;")
-        filtered_df['pnl_text'] = filtered_df['PnL'].apply(lambda x: f"<span style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>" if x < 0 else f"<span style='color:#4ade80'>+{unit_str} {x:,.0f}</span>" if x > 0 else f"{unit_str} 0")
+        
+        # 💡 [新增] 完美格式化：左半邊文字(含百分比)、右半邊文字(含金額)
+        def get_val_text_global(x):
+            if x < 0: return f"<span style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>"
+            elif x > 0: return f"<span style='color:#4ade80'>+{unit_str} {x:,.0f}</span>"
+            else: return f"{unit_str} 0"
+
+        def get_pct_text_global(row):
+            pnl, cost = row['PnL'], row['Cost']
+            pct = (pnl / cost * 100) if cost > 0 else 0
+            if pnl < 0: return f"<span style='color:#ef4444'>{pct:,.2f}%</span>"
+            elif pnl > 0: return f"<span style='color:#4ade80'>+{pct:,.2f}%</span>"
+            else: return "0.00%"
+
+        filtered_df['pnl_val_text'] = filtered_df['PnL'].apply(get_val_text_global)
+        filtered_df['pnl_pct_text'] = filtered_df.apply(get_pct_text_global, axis=1)
 
         filtered_df['Value_Gain'] = filtered_df[['Value', 'Cost']].max(axis=1)
         filtered_df['Value_Loss'] = filtered_df[['Value', 'Cost']].min(axis=1)
@@ -887,16 +892,18 @@ else:
             if privacy:
                 hover_temp_val = "＊＊＊＊<extra></extra>"
                 hover_temp_cost = "＊＊＊＊<extra></extra>"
-                hover_temp_pnl = "＊＊＊＊<extra></extra>"
+                hover_temp_pnl = "＊＊＊＊<extra>＊＊＊＊</extra>"
             else:
                 hover_temp_val = unit_str + " %{y:,.0f}<extra></extra>"
                 hover_temp_cost = unit_str + " %{y:,.0f}<extra></extra>"
-                hover_temp_pnl = "%{customdata}<extra></extra>"
+                # 💡 [重點魔法] 利用 customdata[1] 放百分比並塞進 extra (表格左欄)，customdata[0] 放金額塞進 hovertemplate (表格右欄)
+                hover_temp_pnl = "%{customdata[0]}<extra>%{customdata[1]}</extra>"
 
             # 1. 隱形的損益軌跡 (顯示在 Tooltip 最下方)
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['pnl_y'], mode='lines', name='損益', 
-                line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_text'] if not privacy else None, 
+                line=dict(color='rgba(0,0,0,0)', width=0), 
+                customdata=filtered_df[['pnl_val_text', 'pnl_pct_text']].values if not privacy else None, 
                 hovertemplate=hover_temp_pnl, showlegend=False
             ))
 
@@ -1086,10 +1093,26 @@ else:
                 currency_symbols = {"TWD": "NT&#36;", "USD": "US&#36;", "BTC": "BTC"}
                 asset_unit_str = currency_symbols.get(asset_currency, asset_currency)
 
-                daily_data["pnl_text"] = daily_data["pnl"].apply(lambda x: f"<span style='color:#ef4444'>-{asset_unit_str} {abs(x):,.0f}</span>" if x < 0 else f"<span style='color:#4ade80'>+{asset_unit_str} {x:,.0f}</span>" if x > 0 else f"{asset_unit_str} 0")
+                def get_val_text_ind(x):
+                    if x < 0: return f"<span style='color:#ef4444'>-{asset_unit_str} {abs(x):,.0f}</span>"
+                    elif x > 0: return f"<span style='color:#4ade80'>+{asset_unit_str} {x:,.0f}</span>"
+                    else: return f"{asset_unit_str} 0"
 
+                def get_pct_text_ind(row):
+                    pnl, cost = row['pnl'], row['cost']
+                    pct = (pnl / cost * 100) if cost > 0 else 0
+                    if pnl < 0: return f"<span style='color:#ef4444'>{pct:,.2f}%</span>"
+                    elif pnl > 0: return f"<span style='color:#4ade80'>+{pct:,.2f}%</span>"
+                    else: return "0.00%"
+
+                daily_data['pnl_val_text'] = daily_data['pnl'].apply(get_val_text_ind)
+                daily_data['pnl_pct_text'] = daily_data.apply(get_pct_text_ind, axis=1)
+
+                # 💡 為個別圖表建立填色的輔助邊界
                 daily_data['Value_Gain'] = daily_data[['Value', 'cost']].max(axis=1)
                 daily_data['Value_Loss'] = daily_data[['Value', 'cost']].min(axis=1)
+                
+                # 💡 建立一個隱形的 Y 軸，讓「損益」永遠排在 Tooltip 最下方
                 daily_data['pnl_y'] = daily_data[['Value', 'cost']].min(axis=1) - 1
 
                 st.markdown(f"*(註: 以下圖表皆以該標的原始計價幣別 **{asset_currency}** 呈現，不受匯率波動影響)*")
@@ -1103,22 +1126,23 @@ else:
                     if privacy:
                         hover_val = "＊＊＊＊<extra></extra>"
                         hover_cost = "＊＊＊＊<extra></extra>"
-                        hover_pnl = "＊＊＊＊<extra></extra>"
+                        hover_pnl = "＊＊＊＊<extra>＊＊＊＊</extra>"
                     else:
                         hover_val = asset_unit_str + " %{y:,.0f}<extra></extra>"
                         hover_cost = asset_unit_str + " %{y:,.0f}<extra></extra>"
-                        hover_pnl = "%{customdata}<extra></extra>"
+                        hover_pnl = "%{customdata[0]}<extra>%{customdata[1]}</extra>"
                     
                     # 1. 隱形的損益軌跡 (顯示在 Tooltip 最下方)
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['pnl_y'], mode='lines', name='損益', 
-                        line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_text'] if not privacy else None, 
+                        line=dict(color='rgba(0,0,0,0)', width=0), 
+                        customdata=daily_data[['pnl_val_text', 'pnl_pct_text']].values if not privacy else None, 
                         hovertemplate=hover_pnl, showlegend=False
                     ))
 
                     # 2. 成本線
                     fig1.add_trace(go.Scatter(
-                        x=daily_data.index, y=daily_data['cost'], mode='lines', name='成本', 
+                        x=daily_data.index, y=daily_data['cost'], mode='lines', name='投入成本', 
                         line=dict(color='#3b82f6', width=2), hovertemplate=hover_cost
                     ))
                     
