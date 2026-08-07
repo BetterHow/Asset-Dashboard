@@ -79,14 +79,15 @@ def load_or_migrate_data(sheet_name, default_val):
         pass
     return default_val
 
-# 初始化載入資料
+# ========================================================
+# 📊 狀態管理與初始化
+# ========================================================
 if "transactions" not in st.session_state: st.session_state.transactions = load_or_migrate_data("transactions", [])
 if "manual_prices" not in st.session_state: st.session_state.manual_prices = load_or_migrate_data("manual_prices", {})
 if "cash_accounts" not in st.session_state: st.session_state.cash_accounts = load_or_migrate_data("cash_accounts", [])
 if "liabilities_accounts" not in st.session_state: st.session_state.liabilities_accounts = load_or_migrate_data("liabilities_accounts", [])
 if "history_snapshots" not in st.session_state: st.session_state.history_snapshots = load_or_migrate_data("history_snapshots", {})
 
-# 狀態管理
 if "selected_category" not in st.session_state: st.session_state.selected_category = None
 if "editing_id" not in st.session_state: st.session_state.editing_id = None
 if "edit_cash_id" not in st.session_state: st.session_state.edit_cash_id = None
@@ -428,15 +429,6 @@ if st.session_state.selected_extras:
 st.divider()
 
 with st.sidebar:
-    st.markdown(f"<div style='color: #4ade80; font-size: 14px; font-weight: bold; margin-bottom: 5px;'>🔓 已登入：{st.session_state.user.email}</div>", unsafe_allow_html=True)
-    if st.button("登出金庫", use_container_width=True):
-        supabase.auth.sign_out()
-        st.session_state.user = None
-        st.session_state.password = None
-        st.cache_data.clear()
-        st.rerun()
-    st.divider()
-    
     st.header("新增交易")
     
     if st.session_state.clear_form:
@@ -893,7 +885,6 @@ else:
         filtered_df['Value_Gain'] = filtered_df[['Value', 'Cost']].max(axis=1)
         filtered_df['Value_Loss'] = filtered_df[['Value', 'Cost']].min(axis=1)
         
-        # 動態計算 offset，確保 Y 軸排列順序完美
         y_max = filtered_df[['Value', 'Cost']].max().max()
         y_min = filtered_df[['Value', 'Cost']].min().min()
         y_range = y_max - y_min
@@ -916,12 +907,12 @@ else:
             val_name = '淨額' if st.session_state.selected_category is not None else '淨資產'
             
             if privacy:
-                hover_temp_val = "＊＊＊＊"
-                hover_temp_cost = "＊＊＊＊"
-                hover_temp_pnl = "＊＊＊＊"
-                hover_temp_pct = "＊＊＊＊"
+                hover_temp_val = "＊＊＊＊<extra></extra>"
+                hover_temp_cost = "＊＊＊＊<extra></extra>"
+                hover_temp_pnl = "＊＊＊＊<extra></extra>"
+                hover_temp_pct = "＊＊＊＊<extra></extra>"
             else:
-                # 💡 完美切齊魔法：拿掉多餘的冒號字串！讓 Plotly 原生的冒號自動生效
+                # 💡 完美切齊魔法：把多餘的冒號刪掉，讓 Plotly 原生的冒號自動對齊生效！
                 hover_temp_val = unit_str + " %{y:,.0f}"
                 hover_temp_cost = unit_str + " %{y:,.0f}"
                 hover_temp_pnl = "%{customdata}"
@@ -1186,7 +1177,7 @@ else:
                         hover_pnl = "＊＊＊＊"
                         hover_pct = "＊＊＊＊"
                     else:
-                        # 💡 完美切齊魔法：拿掉多餘的冒號字串！讓 Plotly 原生的冒號自動生效
+                        # 💡 完全拿掉手動輸入的冒號，讓 Plotly 的表格自動對齊生效
                         hover_val = asset_unit_str + " %{y:,.0f}"
                         hover_cost = asset_unit_str + " %{y:,.0f}"
                         hover_pnl = "%{customdata}"
@@ -1224,7 +1215,7 @@ else:
                     
                     # 4. 淨值線
                     fig1.add_trace(go.Scatter(
-                        x=daily_data.index, y=daily_data['Value'], mode='lines', name='持倉現值', 
+                        x=daily_data.index, y=daily_data['Value'], mode='lines', name=val_name_ind, 
                         line=dict(color='#00CC96', width=2), hovertemplate=hover_val
                     ))
 
@@ -1326,7 +1317,7 @@ else:
                     with c1: new_date = st.date_input("日期", value=date.fromisoformat(row["date"]), key=f"ed_d_{row['id']}", label_visibility="collapsed")
                     with c2: 
                         type_options_list = ["買進", "賣出", "Sell Put", "Covered Call", "配息"]
-                        current_type_idx = type_options_list.index(row["type"]) if row["type"] in type_options_list else 0
+                        current_type_idx = type_options_list.index(row["type"]) if row["type in type_options_list else 0
                         new_type = st.selectbox("動作", type_options_list, index=current_type_idx, key=f"ed_t_{row['id']}", label_visibility="collapsed")
                     with c3:
                         cc1, cc2 = st.columns([1.5, 1])
