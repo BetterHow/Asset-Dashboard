@@ -428,6 +428,15 @@ if st.session_state.selected_extras:
 st.divider()
 
 with st.sidebar:
+    st.markdown(f"<div style='color: #4ade80; font-size: 14px; font-weight: bold; margin-bottom: 5px;'>🔓 已登入：{st.session_state.user.email}</div>", unsafe_allow_html=True)
+    if st.button("登出金庫", use_container_width=True):
+        supabase.auth.sign_out()
+        st.session_state.user = None
+        st.session_state.password = None
+        st.cache_data.clear()
+        st.rerun()
+    st.divider()
+    
     st.header("新增交易")
     
     if st.session_state.clear_form:
@@ -884,6 +893,7 @@ else:
         filtered_df['Value_Gain'] = filtered_df[['Value', 'Cost']].max(axis=1)
         filtered_df['Value_Loss'] = filtered_df[['Value', 'Cost']].min(axis=1)
         
+        # 動態計算 offset，確保 Y 軸排列順序完美
         y_max = filtered_df[['Value', 'Cost']].max().max()
         y_min = filtered_df[['Value', 'Cost']].min().min()
         y_range = y_max - y_min
@@ -906,18 +916,18 @@ else:
             val_name = '淨額' if st.session_state.selected_category is not None else '淨資產'
             
             if privacy:
-                hover_temp_val = "＊＊＊＊<extra></extra>"
-                hover_temp_cost = "＊＊＊＊<extra></extra>"
-                hover_temp_pnl = "＊＊＊＊<extra></extra>"
-                hover_temp_pct = "＊＊＊＊<extra></extra>"
+                hover_temp_val = "＊＊＊＊"
+                hover_temp_cost = "＊＊＊＊"
+                hover_temp_pnl = "＊＊＊＊"
+                hover_temp_pct = "＊＊＊＊"
             else:
-                # 💡 在數值欄強制補齊最前方的冒號，達到完美的四行垂直對齊
-                hover_temp_val = ": " + unit_str + " %{y:,.0f}"
-                hover_temp_cost = ": " + unit_str + " %{y:,.0f}"
-                hover_temp_pnl = ": %{customdata}"
-                hover_temp_pct = ": %{customdata}"
+                # 💡 完美切齊魔法：拿掉多餘的冒號字串！讓 Plotly 原生的冒號自動生效
+                hover_temp_val = unit_str + " %{y:,.0f}"
+                hover_temp_cost = unit_str + " %{y:,.0f}"
+                hover_temp_pnl = "%{customdata}"
+                hover_temp_pct = "%{customdata}"
 
-            # 1. 百分比 (隱形軌跡，獨立名稱) -> 顯示在 Tooltip 最下方
+            # 1. 隱形軌跡：百分比 (Row 4) -> 顯示在最底
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['pct_y_gain'], mode='lines', name='百分比', 
                 line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_pct_text'] if not privacy else None, 
@@ -929,7 +939,7 @@ else:
                 hovertemplate=hover_temp_pct, showlegend=False, connectgaps=False
             ))
 
-            # 2. 損益金額 (隱形軌跡，獨立名稱)
+            # 2. 隱形軌跡：損益金額 (Row 3) -> 顯示在第三排
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['pnl_y_gain'], mode='lines', name='損益', 
                 line=dict(color='rgba(0,0,0,0)', width=0), customdata=filtered_df['pnl_val_text'] if not privacy else None, 
@@ -941,14 +951,14 @@ else:
                 hovertemplate=hover_temp_pnl, showlegend=False, connectgaps=False
             ))
 
-            # 3. 成本線
+            # 3. 成本線 (Row 2) -> 顯示在第二排
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['Cost'], mode='lines', name='成本', 
                 line=dict(color='#3b82f6', width=3, shape='linear'), 
                 hovertemplate=hover_temp_cost
             ))
             
-            # 4. 淨資產線
+            # 4. 淨資產線 (Row 1) -> 顯示在最上面
             fig_line.add_trace(go.Scatter(
                 x=filtered_df['Date'], y=filtered_df['Value'], mode='lines', 
                 name=val_name, 
@@ -1171,15 +1181,16 @@ else:
                     
                     val_name_ind = '淨額'
                     if privacy:
-                        hover_val = " : ＊＊＊＊<extra></extra>"
-                        hover_cost = " : ＊＊＊＊<extra></extra>"
-                        hover_pnl = " : ＊＊＊＊<extra></extra>"
-                        hover_pct = " : ＊＊＊＊<extra></extra>"
+                        hover_val = "＊＊＊＊"
+                        hover_cost = "＊＊＊＊"
+                        hover_pnl = "＊＊＊＊"
+                        hover_pct = "＊＊＊＊"
                     else:
-                        hover_val = ": " + asset_unit_str + " %{y:,.0f}"
-                        hover_cost = ": " + asset_unit_str + " %{y:,.0f}"
-                        hover_pnl = ": %{customdata}"
-                        hover_pct = ": %{customdata}"
+                        # 💡 完美切齊魔法：拿掉多餘的冒號字串！讓 Plotly 原生的冒號自動生效
+                        hover_val = asset_unit_str + " %{y:,.0f}"
+                        hover_cost = asset_unit_str + " %{y:,.0f}"
+                        hover_pnl = "%{customdata}"
+                        hover_pct = "%{customdata}"
                     
                     # 1. 隱形軌跡：百分比 (Row 4)
                     fig1.add_trace(go.Scatter(
@@ -1213,7 +1224,7 @@ else:
                     
                     # 4. 淨值線
                     fig1.add_trace(go.Scatter(
-                        x=daily_data.index, y=daily_data['Value'], mode='lines', name=val_name_ind, 
+                        x=daily_data.index, y=daily_data['Value'], mode='lines', name='持倉現值', 
                         line=dict(color='#00CC96', width=2), hovertemplate=hover_val
                     ))
 
@@ -1284,4 +1295,98 @@ else:
                         st.plotly_chart(fig2, use_container_width=True, config={'scrollZoom': True})
 
     st.divider()
-    st.交易紀錄管理(tx_df)
+    st.subheader("交易紀錄管理")
+    if st.session_state.transactions:
+        tx_df = pd.DataFrame(st.session_state.transactions)
+        tx_df["date_obj"] = pd.to_datetime(tx_df["date"]).dt.date
+        tx_df = tx_df.sort_values("date", ascending=False).reset_index(drop=True)
+        min_d, max_d, today_d = tx_df["date_obj"].min(), tx_df["date_obj"].max(), date.today()
+        
+        tx_df["target_label"] = tx_df.apply(lambda row: f"{row['name']} ({row['ticker']})" if row['ticker'] else row['name'], axis=1)
+        target_options = ["全部"] + sorted(tx_df["target_label"].unique().tolist())
+
+        f_c1, f_c2, f_c3 = st.columns(3)
+        with f_c1:
+            date_preset = st.selectbox("篩選時間範圍", ["全部", "本月", "半年", "一年", "自訂區間"])
+            date_range = st.date_input("選擇日期", value=(min_d, max_d), min_value=min_d, max_value=max_d) if date_preset == "自訂區間" else (min_d, max_d) if date_preset == "全部" else (today_d.replace(day=1), today_d) if date_preset == "本月" else (today_d - timedelta(days=183), today_d) if date_preset == "半年" else (today_d - timedelta(days=365), today_d)
+        with f_c2: selected_target = st.selectbox("篩選標的", target_options)
+        with f_c3: action_filter = st.selectbox("篩選動作", ["全部", "買進", "賣出", "Sell Put", "Covered Call", "配息"])
+
+        if isinstance(date_range, tuple):
+            if len(date_range) == 2: tx_df = tx_df[(tx_df["date_obj"] >= date_range[0]) & (tx_df["date_obj"] <= date_range[1])]
+            elif len(date_range) == 1: tx_df = tx_df[tx_df["date_obj"] == date_range[0]]
+        if selected_target != "全部": tx_df = tx_df[tx_df["target_label"] == selected_target]
+        if action_filter != "全部": tx_df = tx_df[tx_df["type"] == action_filter]
+        st.caption(f"共找到 {len(tx_df)} 筆紀錄")
+
+        def render_tx_rows(df_to_render):
+            for i, row in df_to_render.iterrows():
+                if st.session_state.editing_id == row["id"]:
+                    c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 2.0, 1.8, 0.7, 1.3])
+                    with c1: new_date = st.date_input("日期", value=date.fromisoformat(row["date"]), key=f"ed_d_{row['id']}", label_visibility="collapsed")
+                    with c2: 
+                        type_options_list = ["買進", "賣出", "Sell Put", "Covered Call", "配息"]
+                        current_type_idx = type_options_list.index(row["type"]) if row["type"] in type_options_list else 0
+                        new_type = st.selectbox("動作", type_options_list, index=current_type_idx, key=f"ed_t_{row['id']}", label_visibility="collapsed")
+                    with c3:
+                        cc1, cc2 = st.columns([1.5, 1])
+                        new_name = cc1.text_input("名稱", value=row["name"], key=f"ed_n_{row['id']}", label_visibility="collapsed")
+                        new_ticker = cc2.text_input("代號", value=row["ticker"], key=f"ed_tk_{row['id']}", label_visibility="collapsed")
+                    with c4:
+                        cc1, cc2 = st.columns(2)
+                        new_qty = cc1.text_input("數量", value=str(row["quantity"]), key=f"ed_q_{row['id']}", label_visibility="collapsed")
+                        new_price = cc2.text_input("價格", value=str(row["price"]), key=f"ed_p_{row['id']}", label_visibility="collapsed")
+                    with c5: new_curr = st.selectbox("幣別", ["TWD", "USD"], index=0 if row["currency"]=="TWD" else 1, key=f"ed_c_{row['id']}", label_visibility="collapsed")
+                    with c6:
+                        b1, b2 = st.columns([0.9, 0.9])
+                        if b1.button("儲存", key=f"save_tx_{row['id']}", type="primary", use_container_width=True):
+                            for idx, t in enumerate(st.session_state.transactions):
+                                if t["id"] == row["id"]:
+                                    st.session_state.transactions[idx].update({"date": new_date.strftime("%Y-%m-%d"), "type": new_type, "name": new_name.strip(), "ticker": new_ticker.strip().upper(), "quantity": safe_float(new_qty) or row["quantity"], "price": safe_float(new_price) if safe_float(new_price) is not None else row["price"], "currency": new_curr})
+                                    break
+                            save_data("transactions", st.session_state.transactions)
+                            st.session_state.editing_id = None
+                            fetch_all_prices.clear()
+                            st.rerun()
+                        if b2.button("取消", key=f"cancel_tx_{row['id']}", use_container_width=True):
+                            st.session_state.editing_id = None
+                            st.rerun()
+                else:
+                    c1, c2, c3, c4, c5, c6 = st.columns([1.0, 0.55, 1.6, 1.5, 0.55, 1.3])
+                    qty_display, price_display = ("＊＊＊＊", "＊＊＊＊") if privacy else (fmt(row['quantity']), fmt(row['price']))
+                    with c1: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['date']}</div>", unsafe_allow_html=True)
+                    with c2: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['type']}</div>", unsafe_allow_html=True)
+                    with c3: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['name']}（{row['ticker']}）</div>", unsafe_allow_html=True)
+                    with c4: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{qty_display} × {price_display}</div>", unsafe_allow_html=True)
+                    with c5: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['currency']}</div>", unsafe_allow_html=True)
+                    with c6:
+                        b1, b2 = st.columns([0.9, 0.9])
+                        if b1.button("編輯", key=f"edit_{row['id']}"):
+                            st.session_state.editing_id = row["id"]
+                            st.rerun()
+                        if b2.button("刪除", key=f"del_{row['id']}"):
+                            st.session_state.transactions = [t for t in st.session_state.transactions if t["id"] != row["id"]]
+                            save_data("transactions", st.session_state.transactions)
+                            st.success("已刪除")
+                            fetch_all_prices.clear()
+                            st.rerun()
+
+        if not tx_df.empty:
+            h1, h2, h3, h4, h5, h6 = st.columns([1.0, 0.55, 1.6, 1.5, 0.55, 1.3])
+            h1.markdown("<div style='text-align:center'><b>日期</b></div>", unsafe_allow_html=True)
+            h2.markdown("<div style='text-align:center'><b>動作</b></div>", unsafe_allow_html=True)
+            h3.markdown("<div style='text-align:center'><b>標的</b></div>", unsafe_allow_html=True)
+            h4.markdown("<div style='text-align:center'><b>明細</b></div>", unsafe_allow_html=True)
+            h5.markdown("<div style='text-align:center'><b>幣別</b></div>", unsafe_allow_html=True)
+            h6.markdown("")
+            render_tx_rows(tx_df.head(20))
+            if len(tx_df) > 20:
+                with st.expander(f"展開顯示其餘 {len(tx_df) - 20} 筆紀錄..."): render_tx_rows(tx_df.iloc[20:])
+        else: st.info("沒有符合條件的紀錄。")
+    else: st.caption("尚無交易紀錄")
+
+    st.divider()
+    st.subheader("匯出")
+    c1, c2 = st.columns(2)
+    with c1: st.download_button("下載持倉 CSV", df.to_csv(index=False).encode("utf-8-sig"), f"holdings_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
+    with c2: st.download_button("下載交易紀錄 CSV", pd.DataFrame(st.session_state.transactions).to_csv(index=False).encode("utf-8-sig"), f"transactions_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
