@@ -252,6 +252,35 @@ def looks_like_ticker(text: str) -> bool:
 def mask_val(val_str): return "＊＊＊＊" if st.session_state.privacy_mode else val_str
 
 # ========================================================
+# ⚙️ 動態數量小數點格式化引擎
+# ========================================================
+def format_dynamic_qty(qty, price, currency):
+    """依照單價高低，動態決定『數量』的顯示小數位數"""
+    if pd.isna(qty) or qty is None: return "—"
+    try: qty_val = float(qty)
+    except: return str(qty)
+    
+    try: price_val = float(price)
+    except: price_val = 0.0
+    
+    # 換算為 USD 進行標準化比較
+    if currency == "TWD": price_usd = price_val / usd_twd
+    elif currency == "BTC": price_usd = price_val * (btc_usd if btc_usd else 95000.0)
+    else: price_usd = price_val
+    
+    # 嚴格套用單價門檻規則
+    if price_usd >= 10000: decimals = 4
+    elif price_usd >= 5000: decimals = 3
+    elif price_usd >= 1500: decimals = 2
+    elif price_usd >= 500: decimals = 1
+    else:
+        # 單價低於 500 美金的標的
+        if qty_val % 1 != 0: decimals = 2  # 若有碎股，最多顯示到小數第2位
+        else: decimals = 0                 # 整股直接顯示整數
+            
+    return f"{qty_val:,.{decimals}f}"
+
+# ========================================================
 # 📊 UI 渲染開始
 # ========================================================
 st.markdown(
@@ -385,7 +414,6 @@ def render_liability_manager(unit, display_currency, total_value, net_value):
             
             lib_df["顯示金額"] = lib_df["TWD金額"] if display_currency == "TWD" else lib_df["TWD金額"] / usd_twd if display_currency == "USD" else (lib_df["TWD金額"] / usd_twd) / btc_usd if btc_usd else lib_df["TWD金額"]
             
-            # 依照顯示金額 (折算後) 由大到小排序
             lib_df = lib_df.sort_values(by="顯示金額", ascending=False)
             lib_total_display = lib_df["顯示金額"].sum()
 
@@ -410,7 +438,6 @@ def render_liability_manager(unit, display_currency, total_value, net_value):
                     else: st.warning("請輸入有效的金額數字。")
                         
         if st.session_state.liabilities_accounts:
-            # 列表依照 TWD 價值由大到小排序
             sorted_liabilities = sorted(
                 st.session_state.liabilities_accounts,
                 key=lambda acc: acc["balance"] if acc["currency"] == "TWD" else acc["balance"] * usd_twd,
@@ -786,13 +813,21 @@ else:
         for i, (_, row) in enumerate(category_summary.iterrows()):
             col = cols[i % num_cols]
             cat, amount, pnl, cost = row["類型"], fmt_total(row["顯示現值"], display_currency), row["顯示損益"], row["顯示總成本"]
-            cat_pnl_pct = (pnl / cost * 100) if cost > 0 else 0
+            
+            if cost <= 0 and pnl > 0:
+                pct_display_str = "∞%"
+            elif cost <= 0 and pnl <= 0:
+                pct_display_str = "0.0%"
+            else:
+                cat_pnl_pct = (pnl / cost * 100)
+                pct_display_str = f"{abs(cat_pnl_pct):.1f}%"
+                
             pnl_str, pnl_sign = fmt_total(abs(pnl), display_currency), "+" if pnl > 0 else "-" if pnl < 0 else ""
             pnl_color = "#ef4444" if pnl < 0 else "#4ade80" 
             safe_unit = unit.replace("$", "&#36;")
             
             amount_display, pnl_val_display = mask_val(f"{safe_unit} {amount}"), mask_val(f"{safe_unit} {pnl_str}")
-            pnl_display = f"<div style='font-size:16px; font-weight:600; color:{pnl_color}; margin-top:4px;'>({pnl_sign}{pnl_val_display} ｜ {pnl_sign}{abs(cat_pnl_pct):.1f}%)</div>" if cat != "現金" else "<div style='font-size:16px; margin-top:4px; visibility:hidden;'>-</div>"
+            pnl_display = f"<div style='font-size:16px; font-weight:600; color:{pnl_color}; margin-top:4px;'>({pnl_sign}{pnl_val_display} ｜ {pnl_sign}{pct_display_str})</div>" if cat != "現金" else "<div style='font-size:16px; margin-top:4px; visibility:hidden;'>-</div>"
 
             col.markdown(f"<div style='padding: 5px 0 15px 0;'><div style='font-size:18px; font-weight:600; color:#e2e8f0'>{cat}：{amount_display}</div>{pnl_display}</div>", unsafe_allow_html=True)
 
@@ -943,6 +978,10 @@ else:
 
         def get_pct_text_global(row):
             pnl, cost = row['PnL'], row['Cost']
+            if cost <= 0 and pnl > 0:
+                return "<span style='color:#4ade80'>+∞%</span>"
+            elif cost <= 0 and pnl <= 0:
+                return "0.00%"
             pct = (pnl / cost * 100) if cost > 0 else 0
             if pnl < 0: return f"<span style='color:#ef4444'>-{abs(pct):.2f}%</span>"
             elif pnl > 0: return f"<span style='color:#4ade80'>+{pct:.2f}%</span>"
@@ -954,6 +993,7 @@ else:
         filtered_df['Value_Gain'] = filtered_df[['Value', 'Cost']].max(axis=1)
         filtered_df['Value_Loss'] = filtered_df[['Value', 'Cost']].min(axis=1)
         
+        # 動態計算 offset，確保 Y 軸排列順序完美
         y_max = filtered_df[['Value', 'Cost']].max().max()
         y_min = filtered_df[['Value', 'Cost']].min().min()
         y_range = y_max - y_min
@@ -1043,8 +1083,15 @@ else:
     with st.expander("點此展開 / 收合明細表", expanded=False):
         detail_df = df[df["類型"] == st.session_state.selected_category] if is_category_view else df
         
+        def get_qty_format_for_holdings(r):
+            if r.get("is_cash"):
+                return f"{r['數量']:,.0f}" if r["幣別"] == "TWD" else f"{r['數量']:,.2f}"
+            price = r["現價"] if pd.notna(r["現價"]) and r["現價"] is not None else r["平均成本"]
+            return format_dynamic_qty(r["數量"], price, r["幣別"])
+            
         show_df = pd.DataFrame({
-            "名稱": detail_df["名稱"], "代號": detail_df["代號"], "類型": detail_df["類型"], "幣別": detail_df["幣別"], "數量": detail_df["數量"],
+            "名稱": detail_df["名稱"], "代號": detail_df["代號"], "類型": detail_df["類型"], "幣別": detail_df["幣別"], 
+            "數量": detail_df.apply(get_qty_format_for_holdings, axis=1),
             "平均成本": detail_df.apply(lambda r: None if r.get("is_cash") else r["平均成本"], axis=1),
             "調整後成本": detail_df.apply(lambda r: None if r.get("is_cash") else r["調整後成本"], axis=1),
             "現價": detail_df.apply(lambda r: None if r.get("is_cash") else r["現價"], axis=1),
@@ -1076,7 +1123,7 @@ else:
             st.dataframe(privacy_df, use_container_width=True, hide_index=True)
         else:
             col_cfg = {
-                "數量": st.column_config.NumberColumn("數量", format="%.0f"), 
+                "數量": st.column_config.TextColumn("數量"), 
                 "平均成本": st.column_config.NumberColumn("平均成本", format="%.2f"),
                 "調整後成本": st.column_config.NumberColumn("調整後成本", format="%.2f"),
                 "現價": st.column_config.NumberColumn("現價", format="%.2f"), 
@@ -1202,6 +1249,10 @@ else:
 
                 def get_pct_text_ind(row):
                     pnl, cost = row['pnl'], row['cost']
+                    if cost <= 0 and pnl > 0:
+                        return "<span style='color:#4ade80'>+∞%</span>"
+                    elif cost <= 0 and pnl <= 0:
+                        return "0.00%"
                     pct = (pnl / cost * 100) if cost > 0 else 0
                     if pnl < 0: return f"<span style='color:#ef4444'>-{abs(pct):.2f}%</span>"
                     elif pnl > 0: return f"<span style='color:#4ade80'>+{pct:.2f}%</span>"
@@ -1244,12 +1295,11 @@ else:
                         hover_pnl = " : ＊＊＊＊<extra>損益</extra>"
                         hover_pct = " : ＊＊＊＊<extra>$$ %</extra>"
                     else:
-                        hover_val = " : " + asset_unit_str + " %{y:,.0f}<extra>" + val_name_ind + "</extra>"
+                        hover_val = " : " + asset_unit_str + f" %{{y:,.0f}}<extra>{val_name_ind}</extra>"
                         hover_cost = " : " + asset_unit_str + " %{y:,.0f}<extra>成本</extra>"
                         hover_pnl = " : %{customdata}<extra>損益</extra>"
                         hover_pct = " : %{customdata}<extra>$$ %</extra>"
                     
-                    # 1. 隱形軌跡：百分比 (Row 4)
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['pct_y_gain'], mode='lines', name='百分比', 
                         line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_pct_text'] if not privacy else None, 
@@ -1261,7 +1311,6 @@ else:
                         hovertemplate=hover_pct, showlegend=False, connectgaps=False
                     ))
 
-                    # 2. 隱形軌跡：損益金額 (Row 3)
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['pnl_y_gain'], mode='lines', name='損益', 
                         line=dict(color='rgba(0,0,0,0)', width=0), customdata=daily_data['pnl_val_text'] if not privacy else None, 
@@ -1273,23 +1322,19 @@ else:
                         hovertemplate=hover_pnl, showlegend=False, connectgaps=False
                     ))
 
-                    # 3. 成本線
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['cost'], mode='lines', name='成本', 
                         line=dict(color='#3b82f6', width=2), hovertemplate=hover_cost
                     ))
                     
-                    # 4. 淨值線
                     fig1.add_trace(go.Scatter(
                         x=daily_data.index, y=daily_data['Value'], mode='lines', name=val_name_ind, 
                         line=dict(color='#00CC96', width=2), hovertemplate=hover_val
                     ))
 
-                    # 5. 獲利填色區間 (黃色)
                     fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['cost'], mode='lines', line=dict(width=0), hoverinfo='skip', showlegend=False))
                     fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['Value_Gain'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(255, 193, 7, 0.2)', hoverinfo='skip', showlegend=False))
 
-                    # 6. 虧損填色區間 (紅色)
                     fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['cost'], mode='lines', line=dict(width=0), hoverinfo='skip', showlegend=False))
                     fig1.add_trace(go.Scatter(x=daily_data.index, y=daily_data['Value_Loss'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(239, 68, 68, 0.2)', hoverinfo='skip', showlegend=False))
                     
@@ -1322,7 +1367,7 @@ else:
                         
                         def make_hover(row):
                             if privacy: return "＊＊＊＊"
-                            return f"日期: {row['date']}<br>動作: {row['type']}<br>價格: {row['price']}<br>數量: {row['quantity']}<br>備註: {row['note']}"
+                            return f"日期: {row['date']}<br>動作: {row['type']}<br>價格: {row['price']}<br>數量: {row['quantity']}<br>備註: {row.get('note', '')}"
                         
                         if not buys.empty:
                             buys['hover'] = buys.apply(make_hover, axis=1)
@@ -1379,7 +1424,7 @@ else:
         def render_tx_rows(df_to_render):
             for i, row in df_to_render.iterrows():
                 if st.session_state.editing_id == row["id"]:
-                    c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 2.0, 1.8, 0.7, 1.3])
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns([1.0, 0.6, 1.4, 1.3, 0.5, 1.2, 1.1])
                     with c1: new_date = st.date_input("日期", value=date.fromisoformat(row["date"]), key=f"ed_d_{row['id']}", label_visibility="collapsed")
                     with c2: 
                         type_options_list = ["買進", "賣出", "Sell Put", "Covered Call", "配息"]
@@ -1394,12 +1439,13 @@ else:
                         new_qty = cc1.text_input("數量", value=str(row["quantity"]), key=f"ed_q_{row['id']}", label_visibility="collapsed")
                         new_price = cc2.text_input("價格", value=str(row["price"]), key=f"ed_p_{row['id']}", label_visibility="collapsed")
                     with c5: new_curr = st.selectbox("幣別", ["TWD", "USD"], index=0 if row["currency"]=="TWD" else 1, key=f"ed_c_{row['id']}", label_visibility="collapsed")
-                    with c6:
+                    with c6: new_note = st.text_input("備註", value=row.get("note", ""), key=f"ed_nt_{row['id']}", label_visibility="collapsed")
+                    with c7:
                         b1, b2 = st.columns([0.9, 0.9])
                         if b1.button("儲存", key=f"save_tx_{row['id']}", type="primary", use_container_width=True):
                             for idx, t in enumerate(st.session_state.transactions):
                                 if t["id"] == row["id"]:
-                                    st.session_state.transactions[idx].update({"date": new_date.strftime("%Y-%m-%d"), "type": new_type, "name": new_name.strip(), "ticker": new_ticker.strip().upper(), "quantity": safe_float(new_qty) or row["quantity"], "price": safe_float(new_price) if safe_float(new_price) is not None else row["price"], "currency": new_curr})
+                                    st.session_state.transactions[idx].update({"date": new_date.strftime("%Y-%m-%d"), "type": new_type, "name": new_name.strip(), "ticker": new_ticker.strip().upper(), "quantity": safe_float(new_qty) or row["quantity"], "price": safe_float(new_price) if safe_float(new_price) is not None else row["price"], "currency": new_curr, "note": new_note})
                                     break
                             save_data("transactions", st.session_state.transactions)
                             st.session_state.editing_id = None
@@ -1409,14 +1455,20 @@ else:
                             st.session_state.editing_id = None
                             st.rerun()
                 else:
-                    c1, c2, c3, c4, c5, c6 = st.columns([1.0, 0.55, 1.6, 1.5, 0.55, 1.3])
-                    qty_display, price_display = ("＊＊＊＊", "＊＊＊＊") if privacy else (fmt(row['quantity']), fmt(row['price']))
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns([1.0, 0.6, 1.4, 1.3, 0.5, 1.2, 1.1])
+                    if privacy:
+                        qty_display, price_display = "＊＊＊＊", "＊＊＊＊"
+                    else:
+                        qty_display = format_dynamic_qty(row['quantity'], row['price'], row['currency'])
+                        price_display = fmt(row['price'])
+                        
                     with c1: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['date']}</div>", unsafe_allow_html=True)
                     with c2: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['type']}</div>", unsafe_allow_html=True)
                     with c3: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['name']}（{row['ticker']}）</div>", unsafe_allow_html=True)
                     with c4: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{qty_display} × {price_display}</div>", unsafe_allow_html=True)
                     with c5: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row['currency']}</div>", unsafe_allow_html=True)
-                    with c6:
+                    with c6: st.markdown(f"<div style='text-align:center; line-height:1.2; margin-top:8px;'>{row.get('note', '')}</div>", unsafe_allow_html=True)
+                    with c7:
                         b1, b2 = st.columns([0.9, 0.9])
                         if b1.button("編輯", key=f"edit_{row['id']}"):
                             st.session_state.editing_id = row["id"]
@@ -1429,13 +1481,14 @@ else:
                             st.rerun()
 
         if not tx_df.empty:
-            h1, h2, h3, h4, h5, h6 = st.columns([1.0, 0.55, 1.6, 1.5, 0.55, 1.3])
+            h1, h2, h3, h4, h5, h6, h7 = st.columns([1.0, 0.6, 1.4, 1.3, 0.5, 1.2, 1.1])
             h1.markdown("<div style='text-align:center'><b>日期</b></div>", unsafe_allow_html=True)
             h2.markdown("<div style='text-align:center'><b>動作</b></div>", unsafe_allow_html=True)
             h3.markdown("<div style='text-align:center'><b>標的</b></div>", unsafe_allow_html=True)
             h4.markdown("<div style='text-align:center'><b>明細</b></div>", unsafe_allow_html=True)
             h5.markdown("<div style='text-align:center'><b>幣別</b></div>", unsafe_allow_html=True)
-            h6.markdown("")
+            h6.markdown("<div style='text-align:center'><b>備註</b></div>", unsafe_allow_html=True)
+            h7.markdown("")
             render_tx_rows(tx_df.head(20))
             if len(tx_df) > 20:
                 with st.expander(f"展開顯示其餘 {len(tx_df) - 20} 筆紀錄..."): render_tx_rows(tx_df.iloc[20:])
