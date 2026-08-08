@@ -276,7 +276,6 @@ def render_cash_manager(unit, display_currency):
                 cash_df_list.append({"id": acc["id"], "名稱": acc["name"], "幣別": acc["currency"], "餘額": acc["balance"], "顯示金額": disp_bal})
             
             cash_df = pd.DataFrame(cash_df_list)
-            # 依照顯示金額 (折算後) 由大到小排序
             cash_df = cash_df.sort_values(by="顯示金額", ascending=False)
             cash_total_display = cash_df["顯示金額"].sum()
         else:
@@ -308,7 +307,6 @@ def render_cash_manager(unit, display_currency):
                     else: st.warning("請輸入有效的餘額數字。")
                     
         if st.session_state.cash_accounts:
-            # 列表依照 TWD 價值由大到小排序
             sorted_cash_accounts = sorted(
                 st.session_state.cash_accounts,
                 key=lambda x: x["balance"] if x["currency"] == "TWD" else x["balance"] * usd_twd,
