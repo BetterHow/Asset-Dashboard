@@ -650,12 +650,15 @@ def render_liability_manager(unit, display_currency, total_value, net_value, btc
 render_cash_manager(unit, display_currency, btc_usd, usd_twd)
 render_liability_manager(unit, display_currency, tv, nv, btc_usd, usd_twd)
 
+# ========================================================
+# 📊 目前持倉配置 (圓餅圖與長條圖)
+# ========================================================
 if not df.empty:
     st.subheader("目前持倉配置")
     df_chart = df[df["數量"] != 0].copy()
     cats = df_chart.groupby("類型")[["顯示現值", "顯示損益", "顯示總成本"]].sum().reset_index().sort_values("顯示現值", ascending=False)
-    order = [c for c in cats['類型'] if c not in ['期貨', '現金']] + ([c for c in ['期貨', '現金'] if c in cats['類型'].values])
-    cats = cats.set_index('類型').loc[order].reset_index()
+    order_list = [c for c in cats['類型'] if c not in ['期貨', '現金']] + ([c for c in ['期貨', '現金'] if c in cats['類型'].values])
+    cats = cats.set_index('類型').loc[order_list].reset_index()
     
     n_cols = min(len(cats), 6)
     if n_cols > 0:
@@ -665,15 +668,113 @@ if not df.empty:
             pct = "∞%" if abs(cst)<=1e-5 and p>0 else "0.0%" if abs(cst)<=1e-5 and p<=0 else f"{abs(p/abs(cst)*100):.1f}%"
             sgn = "+" if p>0 else "-" if p<0 else ""
             clr = "#ef4444" if p<0 else "#4ade80"
-            amt_s = mask_val(f"{unit.replace('$', '&#36;')} {a:,.0f}")
-            pnl_s = mask_val(f"{unit.replace('$', '&#36;')} {abs(p):,.0f}")
+            amt_s = mask_val(f"{unit.replace('$', '&#36;')} {a:,.0f}" if display_currency != "BTC" else f"{unit.replace('$', '&#36;')} {a:,.3f}")
+            pnl_s = mask_val(f"{unit.replace('$', '&#36;')} {abs(p):,.0f}" if display_currency != "BTC" else f"{unit.replace('$', '&#36;')} {abs(p):,.3f}")
             pd_ui = f"<div style='font-size:16px; font-weight:600; color:{clr}; margin-top:4px;'>({sgn}{pnl_s} ｜ {sgn}{pct})</div>" if c != "現金" else "<div style='font-size:16px; margin-top:4px; visibility:hidden;'>-</div>"
             cs[i % n_cols].markdown(f"<div style='padding: 5px 0 15px 0;'><div style='font-size:18px; font-weight:600; color:#e2e8f0'>{c}：{amt_s}</div>{pd_ui}</div>", unsafe_allow_html=True)
 
-    view_df = df_chart.groupby("名稱", as_index=False)["顯示現值"].sum()
+    is_category_view = st.session_state.selected_category is not None
+    if is_category_view:
+        view_df = df_chart[df_chart["類型"] == st.session_state.selected_category].copy()
+        cat_total_val = view_df['顯示現值'].sum()
+        cat_total_str = f"{unit.replace('$', '&#36;')} {cat_total_val:,.0f}" if display_currency != "BTC" else f"{unit.replace('$', '&#36;')} {cat_total_val:,.3f}"
+        st.markdown(f"目前顯示：**{st.session_state.selected_category}** 分類總額 {mask_val(cat_total_str)}", unsafe_allow_html=True)
+    else:
+        view_df = df_chart.groupby("名稱", as_index=False)["顯示現值"].sum()
+
     if not view_df.empty:
         all_l = view_df["名稱"].tolist()
         if not st.session_state.visible_items or not st.session_state.visible_items.intersection(set(all_l)): st.session_state.visible_items = set(all_l)
+
+        plot_df = view_df[view_df["名稱"].isin(st.session_state.visible_items)].copy().sort_values(by="顯示現值", ascending=False).reset_index(drop=True)
+        view_total_abs = view_df["顯示現值"].abs().sum()
+        plot_total_abs = plot_df["顯示現值"].abs().sum()
+        colors = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"]
+
+        st.markdown("**圖例**（點擊可顯示/隱藏）")
+        n_cols_leg = 7
+        view_df_sorted = view_df.sort_values("顯示現值", ascending=False).reset_index(drop=True)
+        items = list(view_df_sorted.iterrows())
+        
+        for i in range(0, len(items), n_cols_leg):
+            cols_leg = st.columns(n_cols_leg)
+            for j, (idx, row) in enumerate(items[i:i+n_cols_leg]):
+                lab, val = row["名稱"], row["顯示現值"]
+                pct = (abs(val) / view_total_abs * 100) if view_total_abs > 0 else 0
+                color = colors[list(view_df["名稱"]).index(lab) % len(colors)]
+                is_visible = lab in st.session_state.visible_items
+                
+                with cols_leg[j]:
+                    label_text = f"{lab} | {pct:.1f}%" if is_visible else f"~~{lab}~~"
+                    st.markdown(f"<div style='width:100%; height:6px; background-color:{color}; border-radius:4px; margin-bottom:-14px; position:relative; z-index:1;'></div>", unsafe_allow_html=True)
+                    if st.button(label_text, key=f"leg_all_{lab}", use_container_width=True):
+                        st.session_state.visible_items.discard(lab) if is_visible else st.session_state.visible_items.add(lab)
+                        st.rerun()
+
+        col_pie, col_nav = st.columns([0.88, 0.12])
+        
+        with col_pie:
+            try:
+                with st.popover("⚙️ 圖表設定"):
+                    chart_type_choice = st.selectbox("圖表類型", ["自動 (預設)", "圓餅圖", "長條圖"], index=0, key="chart_type_select")
+                    threshold = st.slider("合併佔比小於多少為「其他」？", 0.0, 5.0, 1.0, 0.5, "%.1f%%")
+            except AttributeError:
+                chart_type_choice = st.selectbox("圖表類型", ["自動 (預設)", "圓餅圖", "長條圖"], index=0, key="chart_type_select")
+                threshold = st.slider("合併佔比小於多少為「其他」？", 0.0, 5.0, 1.0, 0.5, "%.1f%%")
+
+            if plot_df.empty: st.info("請至少選擇一個項目")
+            else:
+                if threshold > 0 and plot_total_abs > 0:
+                    mask = (plot_df["顯示現值"].abs() / plot_total_abs * 100) < threshold
+                    small_df, large_df = plot_df[mask], plot_df[~mask]
+                    if not small_df.empty:
+                        plot_df = pd.concat([large_df, pd.DataFrame([{"名稱": f"其他小部位 ({len(small_df)} 檔)", "顯示現值": small_df["顯示現值"].sum()}])], ignore_index=True)
+                
+                labels = plot_df["名稱"].tolist()
+                values_display = plot_df["顯示現值"].tolist()
+                values_abs = plot_df["顯示現值"].abs().tolist()
+                bar_pie_colors = ["#808080" if lab.startswith("其他小部位") else colors[list(view_df["名稱"]).index(lab) % len(colors)] for lab in labels]
+                
+                pie_text_labels, bar_text_labels = [], []
+                for lab, val in zip(labels, values_display):
+                    abs_val = abs(val)
+                    pct_in_view = (abs_val / plot_total_abs * 100) if plot_total_abs > 0 else 0
+                    pct_of_total = (abs_val / view_total_abs * 100) if view_total_abs > 0 else 0
+                    bar_text_labels.append(f"<b>{pct_in_view:.1f}%<br>({pct_of_total:.1f}%)</b>" if is_category_view else f"<b>{pct_in_view:.1f}%</b>")
+                    pie_text_labels.append(f"<b>{lab}</b><br>{pct_in_view:.1f}%<br>({pct_of_total:.1f}%)" if pct_in_view >= 1.0 and is_category_view else f"<b>{lab}</b><br>{pct_in_view:.1f}%" if pct_in_view >= 1.0 else "")
+                
+                show_bar_chart = (chart_type_choice == "長條圖") or (chart_type_choice == "自動 (預設)" and len(labels) > 10)
+
+                if show_bar_chart:
+                    bar_font_size = 24 if len(labels) <= 12 else 20 if len(labels) <= 15 else 16 if len(labels) <= 20 else 14 if len(labels) <= 30 else 12
+                    fig = go.Figure(data=[go.Bar(
+                        x=labels, y=values_display, text=bar_text_labels, textposition="outside", textfont=dict(size=bar_font_size, color="#e2e8f0"), marker_color=bar_pie_colors,
+                        hovertemplate="%{x}<br>%{text}<extra></extra>" if privacy else "%{x}<br>%{text}<br>%{y:,.2f}<extra></extra>"
+                    )])
+                    fig.update_layout(
+                        margin=dict(t=40, b=40, l=40, r=40), height=650, showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(showgrid=False, tickfont=dict(size=16, color="#e2e8f0")), yaxis=dict(showgrid=True, gridcolor="#333333", tickfont=dict(color="#e2e8f0"), zeroline=False, showticklabels=not privacy)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    fig = go.Figure(data=[go.Pie(
+                        labels=labels, values=values_abs, pull=[0.03]*len(labels), text=pie_text_labels, textinfo="text", textposition="auto",
+                        insidetextfont=dict(size=22, color="#ffffff"), outsidetextfont=dict(size=16, color="#e2e8f0"), 
+                        hovertemplate="%{label}<br>%{percent}<extra></extra>" if privacy else "%{label}<br>%{percent}<br>%{value:,.2f}<extra></extra>",
+                        marker=dict(colors=bar_pie_colors, line=dict(color="#111111", width=1.5)), sort=False, direction="clockwise"
+                    )])
+                    fig.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=750, showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                    fig.update_traces(domain=dict(x=[0.15, 0.85], y=[0.15, 0.85]))
+                    st.plotly_chart(fig, use_container_width=True)
+
+        with col_nav:
+            st.markdown("<div style='margin-top: 60px;'></div>", unsafe_allow_html=True)
+            st.caption("切換分類檢視：")
+            for cat in ["全部"] + order_list:
+                if st.button(cat, use_container_width=True, key=f"nav_cat_{cat}", type="primary" if ((cat == st.session_state.selected_category) or (cat == "全部" and st.session_state.selected_category is None)) else "secondary"):
+                    st.session_state.selected_category = None if cat == "全部" else cat
+                    st.session_state.visible_items = set()
+                    st.rerun()
 
 # ========================================================
 # ⚡ 局部渲染 Fragment: 趨勢圖 
@@ -714,7 +815,7 @@ def render_overall_trend_section(history_snapshots, selected_cat, display_curren
                         c_clr = "#4ade80" if cv>0 else "#ef4444" if cv<0 else "#94a3b8"
                         sgn = "+" if cv>0 else ""
                         def format_cv_val(val, dc): return f"{val:,.0f}" if dc != "BTC" else f"{val:,.4f}"
-                        vs = f"{sgn}{unit} {format_cv_val(abs(cv), display_currency)}"
+                        vs = f"{sgn}{unit.replace('$', '&#36;')} {format_cv_val(abs(cv), display_currency)}"
                         st.markdown(f"<div style='text-align:right; line-height:1.2; margin-top:-10px;'><span style='font-size:16px; color:#94a3b8;'>區間淨值變化</span><br><span style='font-size:30px; font-weight:bold; color:{c_clr};'>{vs} ({sgn}{cp_str})</span></div>", unsafe_allow_html=True)
             
             if not fdf.empty:
@@ -826,6 +927,9 @@ with st.expander("點此展開 / 收合明細表", expanded=False):
             "CC權利金": st.column_config.NumberColumn("CC權利金", format="%,.0f"),
             "已實現損益": st.column_config.NumberColumn("已實現損益", format="%,.0f")
         }
+
+        if st.session_state.selected_category:
+            show_df = show_df[show_df["類型"] == st.session_state.selected_category]
 
         d_long = show_df[(show_df["持倉狀態"] == "持有中(做多)") & (show_df["類型"] != "現金")][cols]
         d_short = show_df[show_df["持倉狀態"] == "持有中(做空)"][cols]
