@@ -9,7 +9,7 @@ import re
 import concurrent.futures
 import gspread
 
-st.set_page_config(page_title="交易紀錄版｜個人資產", page_icon="📊", layout="wide")
+st.set_page_config(page_title="個人加密資產金庫", page_icon="🔐", layout="wide")
 
 # ========================================================
 # ⚡ 效能優化：引入局部渲染技術
@@ -343,7 +343,7 @@ with st.sidebar:
         for k in ["name_input", "ticker_input", "qty_input", "price_input", "note_input", "prev_name_input", "prev_ticker_input"]: st.session_state[k] = ""
         st.session_state.clear_form = False
 
-    TW_MAP = {"元大台灣50":"0050", "元大高股息":"0056", "富邦台50":"006208", "國泰永續高股息":"00878", "群益台灣精選高息":"00919", "復華台灣科技優息":"00929", "元大台灣價值高息":"00940", "元大美債20年":"00679B", "國泰20年美債":"00687B", "群益ESG投等債20+":"00937B", "台積電":"2330", "鸿海":"2317", "聯發科":"2454", "廣達":"2382", "富邦金":"2881", "國泰金":"2882"}
+    TW_MAP = {"元大台灣50":"0050", "元大高股息":"0056", "富邦台50":"006208", "國泰永續高股息":"00878", "群益台灣精選高息":"00919", "復華台灣科技優息":"00929", "元大台灣價值高息":"00940", "元大美債20年":"00679B", "國泰20年美債":"00687B", "群益ESG投等債20+":"00937B", "台積電":"2330", "鴻海":"2317", "聯發科":"2454", "廣達":"2382", "富邦金":"2881", "國泰金":"2882"}
     REV_MAP = {v:k for k,v in TW_MAP.items()}
 
     cn, ct = st.session_state.get("name_input", ""), st.session_state.get("ticker_input", "")
@@ -649,6 +649,12 @@ def render_liability_manager(unit, display_currency, total_value, net_value, btc
                     st.plotly_chart(fig_lib, use_container_width=True)
         else: st.caption("目前無負債紀錄。")
 
+render_cash_manager(unit, display_currency, btc_usd, usd_twd)
+render_liability_manager(unit, display_currency, tv, nv, btc_usd, usd_twd)
+
+# ========================================================
+# 📊 目前持倉配置 (圓餅圖與長條圖)
+# ========================================================
 if not df.empty:
     st.subheader("目前持倉配置")
     df_chart = df[df["數量"] != 0].copy()
@@ -908,7 +914,7 @@ with st.expander("點此展開 / 收合明細表", expanded=False):
             "已實現損益": df.apply(lambda r: None if r.get("is_cash") else r["已實現損益"], axis=1)
         })
 
-        cols = ["名稱", "代號", "類型", "幣別", "數量", "平均成本", "調整後成本", "現價", "原幣現值", f"約當現值({display_currency})", "未實現損益", "股息", "SP權利金", "CC權利金", "已實現損益"]
+        cols = ["名稱", "代號", "類型", "幣別", "數量", "平均成本", "調整後成本", "現價", "原幣現值", f"約當現值({display_currency})", "未實現損益", "已實現損益", "SP權利金", "CC權利金", "股息"]
         
         col_cfg = {
             "數量": st.column_config.NumberColumn("數量"), 
