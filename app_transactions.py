@@ -9,7 +9,7 @@ import re
 import concurrent.futures
 import gspread
 
-st.set_page_config(page_title="個人加密資產金庫", page_icon="🔐", layout="wide")
+st.set_page_config(page_title="交易紀錄版｜個人資產", page_icon="📊", layout="wide")
 
 # ========================================================
 # ⚡ 效能優化：引入局部渲染技術
@@ -81,11 +81,7 @@ def load_or_migrate_data(sheet_name, default_val):
     except Exception: pass
     return default_val
 
-# ========================================================
-# 📊 正式 App 初始化與狀態管理
-# ========================================================
-st.markdown("""<style>section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; } div[data-testid="collapsedControl"], button[data-testid="stSidebarCollapseButton"] { position: fixed !important; top: 10px !important; z-index: 999999; } div[data-testid="stTextInput"] div { padding-top: 0px; padding-bottom: 0px; }</style>""", unsafe_allow_html=True)
-
+# 狀態初始化與載入資料
 for k, def_val in [("transactions", []), ("manual_prices", {}), ("cash_accounts", []), ("liabilities_accounts", []), ("history_snapshots", {})]:
     if k not in st.session_state: st.session_state[k] = load_or_migrate_data(k, def_val)
 
@@ -317,6 +313,8 @@ if today_s not in st.session_state.history_snapshots or st.session_state.history
 # ========================================================
 # 📊 UI 渲染區段開始
 # ========================================================
+st.markdown("""<style>section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; } div[data-testid="collapsedControl"], button[data-testid="stSidebarCollapseButton"] { position: fixed !important; top: 10px !important; z-index: 999999; } div[data-testid="stTextInput"] div { padding-top: 0px; padding-bottom: 0px; }</style>""", unsafe_allow_html=True)
+
 col_rate, col_select, col_empty = st.columns([1.2, 0.7, 3.1])
 with col_rate: st.markdown(f"<span style='font-size:18px; font-weight:600'>USD / TWD {usd_twd:.3f}</span>", unsafe_allow_html=True)
 with col_select:
@@ -682,6 +680,7 @@ if not df.empty:
         cat_total_str = f"{unit.replace('$', '&#36;')} {cat_total_val:,.0f}" if display_currency != "BTC" else f"{unit.replace('$', '&#36;')} {cat_total_val:,.3f}"
         st.markdown(f"目前顯示：**{st.session_state.selected_category}** 分類總額 {mask_val(cat_total_str)}", unsafe_allow_html=True)
     else:
+        # 🟢 修正：在全部視圖下，以「類型」作為分組彙整，確保首頁顯示大類資產
         view_df = df_chart.groupby("類型", as_index=False)["顯示現值"].sum().rename(columns={"類型": "名稱"})
 
     if not view_df.empty:
@@ -691,6 +690,10 @@ if not df.empty:
         plot_df = view_df[view_df["名稱"].isin(st.session_state.visible_items)].copy().sort_values(by="顯示現值", ascending=False).reset_index(drop=True)
         view_total_abs = view_df["顯示現值"].abs().sum()
         plot_total_abs = plot_df["顯示現值"].abs().sum()
+        
+        # 🟢 修正：獨立抓出全局總和，用於計算括號內的「佔總資產比例」
+        global_total_abs = df_chart["顯示現值"].abs().sum() 
+        
         colors = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"]
 
         st.markdown("**圖例**（點擊可顯示/隱藏）")
@@ -741,7 +744,10 @@ if not df.empty:
                 for lab, val in zip(labels, values_display):
                     abs_val = abs(val)
                     pct_in_view = (abs_val / plot_total_abs * 100) if plot_total_abs > 0 else 0
-                    pct_of_total = (abs_val / view_total_abs * 100) if view_total_abs > 0 else 0
+                    
+                    # 🟢 修正：括號內的比例使用全局總和 (global_total_abs)
+                    pct_of_total = (abs_val / global_total_abs * 100) if global_total_abs > 0 else 0
+                    
                     bar_text_labels.append(f"<b>{pct_in_view:.1f}%<br>({pct_of_total:.1f}%)</b>" if is_category_view else f"<b>{pct_in_view:.1f}%</b>")
                     pie_text_labels.append(f"<b>{lab}</b><br>{pct_in_view:.1f}%<br>({pct_of_total:.1f}%)" if pct_in_view >= 1.0 and is_category_view else f"<b>{lab}</b><br>{pct_in_view:.1f}%" if pct_in_view >= 1.0 else "")
                 
@@ -914,6 +920,7 @@ with st.expander("點此展開 / 收合明細表", expanded=False):
             "已實現損益": df.apply(lambda r: None if r.get("is_cash") else r["已實現損益"], axis=1)
         })
 
+        # 🟢 修正：100% 精準還原使用者指定的順序
         cols = ["名稱", "代號", "類型", "幣別", "數量", "平均成本", "調整後成本", "現價", "原幣現值", f"約當現值({display_currency})", "未實現損益", "已實現損益", "SP權利金", "CC權利金", "股息"]
         
         col_cfg = {
