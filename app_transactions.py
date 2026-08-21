@@ -411,7 +411,7 @@ for h in holdings:
         eff = h["原始總成本"] - h["CC權利金"] - h["SP權利金"] - h["股息"] if st.session_state.get("include_premium", False) else h["原始總成本"]
         h["總成本"] = eff
         h["調整後價格"] = (h["原始總成本"] - h["CC權利金"] - h["SP權利金"] - h["股息"]) / h["數量"] if abs(h["數量"]) > 0 else 0
-        h["歷史總均價"] = (h["原始總成本"] - h["CC權利金"] - h["SP權利金"] - h["股息"] - h["已實現損益"]) / h["數量"] if abs(h["數量"]) > 0 else 0
+        h["歷史總均價"] = (h["原始總成本"] - h["已實現損益"]) / h["數量"] if abs(h["數量"]) > 0 else 0
 
 df = pd.DataFrame(holdings) if holdings else pd.DataFrame(columns=["名稱", "代號", "幣別", "類型", "數量", "原始總成本", "平均價格", "CC權利金", "SP權利金", "股息", "已實現損益", "歷史買進數量", "歷史賣出數量", "is_cash", "總成本", "調整後價格", "歷史總均價"])
 if not df.empty:
