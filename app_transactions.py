@@ -165,12 +165,11 @@ def _build_cash_trend_fig(dates, values, unit_str, privacy: bool):
         fill='tozeroy', fillcolor='rgba(0, 204, 150, 0.1)', hovertemplate=hover_temp
     ))
     if dates:
-        dtick_val = 86400000 if len(dates) <= 40 else None
         today_dt = pd.to_datetime(date.today())
         start_date = today_dt - pd.DateOffset(months=1) if len(dates) <= 30 else pd.to_datetime(min(dates)) - pd.Timedelta(days=3)
         fig.update_layout(
             margin=dict(t=10, b=20, l=10, r=10), height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(range=[start_date, today_dt + pd.Timedelta(days=1)], showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d", type="date", dtick=dtick_val),
+            xaxis=dict(range=[start_date, today_dt + pd.Timedelta(days=1)], showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d", type="date"),
             yaxis=dict(showgrid=True, gridcolor="#333333", tickfont=dict(color="#e2e8f0"), zeroline=False, showticklabels=not privacy),
             hovermode="x unified", dragmode="pan"
         )
@@ -198,12 +197,11 @@ def _build_lib_trend_fig(dates, values, unit_str, privacy: bool):
         fill='tozeroy', fillcolor='rgba(239, 85, 59, 0.1)', hovertemplate=hover_temp
     ))
     if dates:
-        dtick_val = 86400000 if len(dates) <= 40 else None
         today_dt = pd.to_datetime(date.today())
         start_date = today_dt - pd.DateOffset(months=1) if len(dates) <= 30 else pd.to_datetime(min(dates)) - pd.Timedelta(days=3)
         fig.update_layout(
             margin=dict(t=10, b=20, l=10, r=10), height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(range=[start_date, today_dt + pd.Timedelta(days=1)], showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d", type="date", dtick=dtick_val),
+            xaxis=dict(range=[start_date, today_dt + pd.Timedelta(days=1)], showgrid=False, tickfont=dict(color="#e2e8f0"), tickformat="%Y-%m-%d", type="date"),
             yaxis=dict(showgrid=True, gridcolor="#333333", tickfont=dict(color="#e2e8f0"), zeroline=False, showticklabels=not privacy),
             hovermode="x unified", dragmode="pan"
         )
@@ -241,8 +239,7 @@ def _build_overall_trend_fig(dates, values, costs, pnl_val_texts, pnl_pct_texts,
     fig.add_trace(go.Scatter(x=fdf_dates, y=fdf_cost, mode='lines', line=dict(width=0), hoverinfo='skip', showlegend=False))
     fig.add_trace(go.Scatter(x=fdf_dates, y=value_loss, mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(239, 68, 68, 0.2)', hoverinfo='skip', showlegend=False))
     
-    dtick_val = 86400000 if len(fdf_dates) <= 40 else None
-    fig.update_layout(margin=dict(t=20, b=20, l=10, r=10), height=350, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(showgrid=False, tickformat="%Y-%m-%d", dtick=dtick_val), yaxis=dict(showgrid=True, showticklabels=not privacy), hovermode="x unified", dragmode="pan")
+    fig.update_layout(margin=dict(t=20, b=20, l=10, r=10), height=350, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(showgrid=False, tickformat="%Y-%m-%d", type="date"), yaxis=dict(showgrid=True, showticklabels=not privacy), hovermode="x unified", dragmode="pan")
     return fig
 
 @st.cache_data(show_spinner=False)
@@ -487,10 +484,16 @@ with st.sidebar:
     st.divider()
     
     st.header("新增交易")
+    
     if st.session_state.clear_form:
-        for k in ["name_input", "ticker_input", "qty_input", "price_input", "note_input", "prev_name_input", "prev_ticker_input"]: st.session_state[k] = ""
+        for k in ["name_input", "ticker_input", "qty_input", "price_input", "note_input", "prev_name_input", "prev_ticker_input"]: 
+            if k in st.session_state: st.session_state[k] = ""
         st.session_state.clear_form = False
 
+    action = st.selectbox("交易類型", ["買進", "賣出", "Sell Put", "Covered Call", "配息"])
+
+    TW_MAP = {"元大台灣50":"0050", "元大高股息":"0056", "富邦台50":"006208", "國泰永續高股息":"00878", "群益台灣精選高息":"00919", "復華台灣科技優息":"00929", "元大台灣價值高息":"00940", "元大美債20年":"00679B", "國泰20年美債":"00687B", "群益ESG投等債20+":"00937B", "台積電":"2330", "鴻海":"2317", "聯發科":"2454", "廣達":"2382", "富邦金":"2881", "國泰金":"2882"}
+    
     user_name_to_ticker = {}
     user_ticker_to_name = {}
     user_ticker_to_type = {}
@@ -506,8 +509,6 @@ with st.sidebar:
             if tk not in user_ticker_to_type:
                 user_ticker_to_type[tk] = ty
                 user_ticker_to_curr[tk] = cu
-
-    TW_MAP = {"元大台灣50":"0050", "元大高股息":"0056", "富邦台50":"006208", "國泰永續高股息":"00878", "群益台灣精選高息":"00919", "復華台灣科技優息":"00929", "元大台灣價值高息":"00940", "元大美債20年":"00679B", "國泰20年美債":"00687B", "群益ESG投等債20+":"00937B", "台積電":"2330", "鴻海":"2317", "聯發科":"2454", "廣達":"2382", "富邦金":"2881", "國泰金":"2882"}
     
     COMBINED_MAP = {**TW_MAP, **user_name_to_ticker}
     REV_MAP = {v:k for k,v in TW_MAP.items()}
@@ -532,7 +533,6 @@ with st.sidebar:
             st.session_state["currency_select"] = user_ticker_to_curr[clt]
         st.session_state["prev_ticker_input"], st.session_state["prev_name_input"] = ct, st.session_state.get("name_input", "")
 
-    action = st.selectbox("交易類型", ["買進", "賣出", "Sell Put", "Covered Call", "配息"])
     name = st.text_input("資產名稱", key="name_input")
     ticker = st.text_input("代號", key="ticker_input")
     tv_str = str(ticker).strip().upper()
