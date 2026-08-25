@@ -304,7 +304,25 @@ def calculate_holdings(transactions):
             amount = price if qty == 0 else qty * price
             if action == "Covered Call": h["CC權利金"] += amount; h["已實現損益"] += amount
             elif action == "Sell Put": h["SP權利金"] += amount; h["已實現損益"] += amount
-            elif action == "配息": h["股息"] += amount; h["已實現損益"] += amount
+            elif action == "配息": 
+                h["股息"] += amount; h["已實現損益"] += amount
+                if qty > 0:
+                    h["歷史買進數量"] += qty
+                    if h["數量"] >= 0: 
+                        new_qty = h["數量"] + qty
+                        h["avg_cost"] = (h["數量"] * h["avg_cost"] + qty * price) / new_qty if new_qty > 0 else 0
+                        h["數量"] = new_qty
+                    else: 
+                        cover_qty = min(qty, abs(h["數量"]))
+                        h["已實現損益"] += (h["avg_cost"] - price) * cover_qty 
+                        h["數量"] += cover_qty
+                        remaining_buy = qty - cover_qty
+                        if remaining_buy > 0: 
+                            h["數量"] = remaining_buy
+                            h["avg_cost"] = price
+                        elif abs(h["數量"]) < 1e-5:
+                            h["數量"] = 0.0
+                            h["avg_cost"] = 0.0
             continue
 
         if action == "買進":
@@ -1402,12 +1420,12 @@ if st.session_state.transactions:
                         if b1.button("編輯", key=f"edit_{row['id']}"):
                             st.session_state.editing_id = row["id"]
                             st.rerun()
-                    if b2.button("刪除", key=f"del_{row['id']}"):
-                        st.session_state.transactions = [t for t in st.session_state.transactions if t["id"] != row["id"]]
-                        save_data("transactions", st.session_state.transactions)
-                        st.success("已刪除")
-                        fetch_all_prices.clear()
-                        st.rerun()
+                        if b2.button("刪除", key=f"del_{row['id']}"):
+                            st.session_state.transactions = [t for t in st.session_state.transactions if t["id"] != row["id"]]
+                            save_data("transactions", st.session_state.transactions)
+                            st.success("已刪除")
+                            fetch_all_prices.clear()
+                            st.rerun()
 
         if not tx_df.empty:
             h1, h2, h3, h4, h5, h6, h7, h8 = st.columns([0.9, 0.6, 1.3, 1.2, 0.5, 1.0, 0.9, 1.1])
