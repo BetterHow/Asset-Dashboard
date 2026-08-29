@@ -302,8 +302,10 @@ def calculate_holdings(transactions):
         
         if action in ["Sell Put", "Covered Call", "配息"]:
             amount = price if qty == 0 else qty * price
-            if action == "Covered Call": h["CC權利金"] += amount; h["已實現損益"] += amount
-            elif action == "Sell Put": h["SP權利金"] += amount; h["已實現損益"] += amount
+            if action == "Covered Call": 
+                h["CC權利金"] += amount; h["已實現損益"] += amount
+            elif action == "Sell Put": 
+                h["SP權利金"] += amount; h["已實現損益"] += amount
             elif action == "配息": 
                 h["股息"] += amount; h["已實現損益"] += amount
                 if qty > 0:
@@ -1032,7 +1034,7 @@ def render_overall_trend_section(history_snapshots, selected_cat, display_curren
                 unit_str = unit.replace("$", "&#36;")
                 
                 def get_val_text_global(x):
-                    if x < 0: return f"<span style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>"
+                    if x < 0: return fspan style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>"
                     elif x > 0: return f"<span style='color:#4ade80'>+{unit_str} {x:,.0f}</span>"
                     else: return f"{unit_str} 0"
 
@@ -1300,6 +1302,11 @@ def render_individual_analysis(transactions, privacy, display_currency, usd_twd,
                         
                         def mk_hover(r): return "＊＊＊＊" if privacy else f"日期: {r['date']}<br>動作: {r['type']}<br>價格: {r['price']}<br>數量: {r['quantity']}<br>備註: {r.get('note', '')}"
                         
+                        def get_y_pos(d, p):
+                            if d in ddf.index and pd.notna(ddf.loc[d, 'Close']):
+                                return ddf.loc[d, 'Close']
+                            return p
+
                         if not buys.empty:
                             buys['hover'] = buys.apply(mk_hover, axis=1)
                             sizes = [max(8, min(25, (q / max_q) * 25)) for q in buys['quantity']]
@@ -1313,12 +1320,20 @@ def render_individual_analysis(transactions, privacy, display_currency, usd_twd,
                         divs = atx[atx['type'] == '配息'].copy()
                         if not divs.empty:
                             divs['hover'] = divs.apply(mk_hover, axis=1)
-                            def get_div_y(d, p):
-                                if d in ddf.index and pd.notna(ddf.loc[d, 'Close']):
-                                    return ddf.loc[d, 'Close']
-                                return p
-                            divs['y_pos'] = divs.apply(lambda r: get_div_y(r['date_obj'], r['price']), axis=1)
+                            divs['y_pos'] = divs.apply(lambda r: get_y_pos(r['date_obj'], r['price']), axis=1)
                             fig2.add_trace(go.Scatter(x=divs['date_obj'], y=divs['y_pos'], mode='markers', name='配息', marker=dict(color='#f59e0b', size=12, symbol='star', line=dict(width=1, color='white')), customdata=divs['hover'], hovertemplate="<br>%{customdata}<extra></extra>"))
+
+                        sps = atx[atx['type'] == 'Sell Put'].copy()
+                        if not sps.empty:
+                            sps['hover'] = sps.apply(mk_hover, axis=1)
+                            sps['y_pos'] = sps.apply(lambda r: get_y_pos(r['date_obj'], r['price']), axis=1)
+                            fig2.add_trace(go.Scatter(x=sps['date_obj'], y=sps['y_pos'], mode='markers', name='Sell Put', marker=dict(color='#8b5cf6', size=12, symbol='triangle-up', line=dict(width=1, color='white')), customdata=sps['hover'], hovertemplate="<br>%{customdata}<extra></extra>"))
+
+                        ccs = atx[atx['type'] == 'Covered Call'].copy()
+                        if not ccs.empty:
+                            ccs['hover'] = ccs.apply(mk_hover, axis=1)
+                            ccs['y_pos'] = ccs.apply(lambda r: get_y_pos(r['date_obj'], r['price']), axis=1)
+                            fig2.add_trace(go.Scatter(x=ccs['date_obj'], y=ccs['y_pos'], mode='markers', name='Covered Call', marker=dict(color='#ec4899', size=12, symbol='triangle-down', line=dict(width=1, color='white')), customdata=ccs['hover'], hovertemplate="<br>%{customdata}<extra></extra>"))
 
                         fig2.update_layout(margin=dict(t=10, b=20, l=10, r=10), height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, showticklabels=not privacy), hovermode="closest", dragmode="pan")
                         st.plotly_chart(fig2, use_container_width=True, config={'scrollZoom': True})
