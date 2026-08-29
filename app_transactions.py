@@ -1034,7 +1034,7 @@ def render_overall_trend_section(history_snapshots, selected_cat, display_curren
                 unit_str = unit.replace("$", "&#36;")
                 
                 def get_val_text_global(x):
-                    if x < 0: return fspan style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>"
+                    if x < 0: return f"<span style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>"
                     elif x > 0: return f"<span style='color:#4ade80'>+{unit_str} {x:,.0f}</span>"
                     else: return f"{unit_str} 0"
 
