@@ -84,12 +84,19 @@ def load_or_migrate_data(sheet_name, default_val):
 # ========================================================
 # 📊 正式 App 初始化與狀態管理
 # ========================================================
-st.markdown("""<style>section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; } div[data-testid="collapsedControl"], button[data-testid="stSidebarCollapseButton"] { position: fixed !important; top: 10px !important; z-index: 999999; } div[data-testid="stTextInput"] div { padding-top: 0px; padding-bottom: 0px; } .js-plotly-plot .plotly .nsewdrag, .js-plotly-plot .plotly .ewdrag, .js-plotly-plot .plotly .nsdrag, .js-plotly-plot .plotly .cursor-crosshair, .js-plotly-plot .plotly .cursor-move { cursor: default !important; }</style>""", unsafe_allow_html=True)
+# 🟢 將下拉選單(st.expander)的標題字體統一放大至 22px 並加粗
+st.markdown("""<style>
+section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; } 
+div[data-testid="collapsedControl"], button[data-testid="stSidebarCollapseButton"] { position: fixed !important; top: 10px !important; z-index: 999999; } 
+div[data-testid="stTextInput"] div { padding-top: 0px; padding-bottom: 0px; } 
+.js-plotly-plot .plotly .nsewdrag, .js-plotly-plot .plotly .ewdrag, .js-plotly-plot .plotly .nsdrag, .js-plotly-plot .plotly .cursor-crosshair, .js-plotly-plot .plotly .cursor-move { cursor: default !important; }
+div[data-testid="stExpander"] details summary p { font-size: 22px !important; font-weight: bold !important; letter-spacing: 0.5px; }
+</style>""", unsafe_allow_html=True)
 
 for k, def_val in [("transactions", []), ("manual_prices", {}), ("cash_accounts", []), ("liabilities_accounts", []), ("history_snapshots", {})]:
     if k not in st.session_state: st.session_state[k] = load_or_migrate_data(k, def_val)
 
-for k, def_val in [("selected_category", None), ("editing_id", None), ("edit_cash_id", None), ("edit_liability_id", None), ("display_currency", "TWD"), ("selected_extras", []), ("visible_items", set()), ("clear_form", False), ("privacy_mode", False), ("prev_ticker", ""), ("prev_type", "台股"), ("prev_name_input", ""), ("prev_ticker_input", "")]:
+for k, def_val in [("selected_category", None), ("editing_id", None), ("edit_cash_id", None), ("edit_liability_id", None), ("adjust_cash_id", None), ("adjust_liability_id", None), ("display_currency", "TWD"), ("selected_extras", []), ("visible_items", set()), ("clear_form", False), ("privacy_mode", False), ("prev_ticker", ""), ("prev_type", "台股"), ("prev_name_input", ""), ("prev_ticker_input", "")]:
     if k not in st.session_state: st.session_state[k] = def_val
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -590,6 +597,14 @@ with st.sidebar:
             fetch_all_prices.clear(); st.rerun()
         else: st.warning("請正確填寫數量與價格。")
 
+def format_hist_row(r, privacy):
+    sign = "+" if r['action'] in ["增加", "建立"] else "-" if r['action'] == "減少" else ""
+    raw_amt = f"{sign}{r['amount']:,.2f}" if r['amount'] % 1 != 0 else f"{sign}{r['amount']:,.0f}"
+    amt_str = "＊＊＊＊" if privacy else raw_amt
+    action_color = "#4ade80" if r['action'] in ["增加", "建立"] else "#ef4444" if r['action'] == "減少" else "#e2e8f0"
+    note_str = f"<span style='color:#94a3b8; font-size:16px; margin-left:8px;'>{r['note']}</span>" if r.get('note') else ""
+    return f"<div style='margin-bottom:6px; font-size:18px;'>🗓️ <span style='color:#94a3b8; font-size:16px;'>{r['date'][:16]}</span> ｜ <span style='color:{action_color}; font-weight:600;'>{r['action']}</span> ｜ <b>{amt_str}</b>{note_str}</div>"
+
 c_t, c_tg, c_r, _, c_tdc = st.columns([1.5, 1.0, 1.0, 2.5, 4.0])
 with c_t: st.markdown("<h3 style='margin: 0; padding-top: 5px; white-space: nowrap;'>資產總覽</h3>", unsafe_allow_html=True)
 with c_tg:
@@ -663,12 +678,19 @@ def render_cash_manager(unit, display_currency, btc_usd, usd_twd):
                 st.write("")
                 if st.form_submit_button("新增帳戶", use_container_width=True):
                     if new_cash_name and safe_float(new_cash_bal) is not None:
-                        st.session_state.cash_accounts.append({
+                        new_acc = {
                             "id": datetime.now().strftime("%Y%m%d%H%M%S%f"), 
                             "name": new_cash_name.strip(), 
                             "currency": new_cash_curr, 
-                            "balance": safe_float(new_cash_bal)
-                        })
+                            "balance": safe_float(new_cash_bal),
+                            "history": [{
+                                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "action": "建立",
+                                "amount": safe_float(new_cash_bal),
+                                "note": "初始餘額"
+                            }]
+                        }
+                        st.session_state.cash_accounts.append(new_acc)
                         save_data("cash_accounts", st.session_state.cash_accounts)
                         st.success("已成功新增現金帳戶！")
                         st.rerun()
@@ -681,6 +703,9 @@ def render_cash_manager(unit, display_currency, btc_usd, usd_twd):
                 reverse=True
             )
             for acc in sorted_cash_accounts:
+                if "history" not in acc:
+                    acc["history"] = [{"date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "action": "初始", "amount": acc["balance"], "note": "系統升級預設"}]
+
                 if st.session_state.edit_cash_id == acc["id"]:
                     c1, c2, c3, c4, c5 = st.columns([2, 1, 2, 1, 1])
                     new_name = c1.text_input("名稱", acc["name"], key=f"c_name_{acc['id']}", label_visibility="collapsed")
@@ -688,25 +713,73 @@ def render_cash_manager(unit, display_currency, btc_usd, usd_twd):
                     new_bal = c3.text_input("餘額", str(acc["balance"]), key=f"c_bal_{acc['id']}", label_visibility="collapsed")
                     if c4.button("儲存", key=f"save_c_{acc['id']}", type="primary", use_container_width=True):
                         acc["name"], acc["currency"] = new_name.strip() if new_name.strip() else acc["name"], new_curr
-                        if safe_float(new_bal) is not None: acc["balance"] = safe_float(new_bal)
+                        if safe_float(new_bal) is not None: 
+                            old_bal = acc["balance"]
+                            new_b = safe_float(new_bal)
+                            if new_b != old_bal:
+                                acc["history"].append({"date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "action": "編輯", "amount": new_b, "note": f"由 {old_bal} 覆蓋修改為 {new_b}"})
+                            acc["balance"] = new_b
                         save_data("cash_accounts", st.session_state.cash_accounts)
                         st.session_state.edit_cash_id = None
                         st.rerun()
                     if c5.button("取消", key=f"cancel_c_{acc['id']}", use_container_width=True):
                         st.session_state.edit_cash_id = None
                         st.rerun()
+                elif st.session_state.adjust_cash_id == acc["id"]:
+                    c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 2.5, 1, 1])
+                    adj_type = c1.selectbox("動作", ["增加", "減少"], key=f"adj_t_{acc['id']}", label_visibility="collapsed")
+                    adj_amt = c2.text_input("金額", key=f"adj_a_{acc['id']}", label_visibility="collapsed", placeholder="輸入金額")
+                    adj_note = c3.text_input("備註", key=f"adj_n_{acc['id']}", label_visibility="collapsed", placeholder="選填備註")
+                    if c4.button("確認", key=f"save_adj_{acc['id']}", type="primary", use_container_width=True):
+                        amt_val = safe_float(adj_amt)
+                        if amt_val is not None and amt_val > 0:
+                            if adj_type == "增加":
+                                acc["balance"] += amt_val
+                            else:
+                                acc["balance"] -= amt_val
+                            acc["history"].append({"date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "action": adj_type, "amount": amt_val, "note": adj_note})
+                            save_data("cash_accounts", st.session_state.cash_accounts)
+                            st.session_state.adjust_cash_id = None
+                            st.rerun()
+                        else:
+                            st.warning("請輸入大於 0 的金額")
+                    if c5.button("取消", key=f"cancel_adj_{acc['id']}", use_container_width=True):
+                        st.session_state.adjust_cash_id = None
+                        st.rerun()
                 else:
-                    c1, c2, c3, c4 = st.columns([3.5, 5.0, 0.8, 0.8])
-                    c1.markdown(f"<div style='font-size:19px; font-weight:bold; margin-top:4px;'>{acc['name']}</div>", unsafe_allow_html=True)
+                    c_main, c_adj, c_edit, c_del = st.columns([7.5, 0.8, 0.8, 0.8])
                     bal_str = f"{acc['balance']:,.0f}" if acc['currency'] == "TWD" else f"{acc['balance']:,.2f}"
-                    c2.markdown(f"<div style='font-size:19px; margin-top:4px;'>{acc['currency']} {mask_val(bal_str)}</div>", unsafe_allow_html=True)
-                    if c3.button("編輯", key=f"edit_c_{acc['id']}", use_container_width=True):
-                        st.session_state.edit_cash_id = acc["id"]
-                        st.rerun()
-                    if c4.button("刪除", key=f"del_c_{acc['id']}", use_container_width=True):
-                        st.session_state.cash_accounts = [a for a in st.session_state.cash_accounts if a["id"] != acc["id"]]
-                        save_data("cash_accounts", st.session_state.cash_accounts)
-                        st.rerun()
+                    
+                    with c_main:
+                        with st.expander(f"🏦 {acc['name']} ｜ {acc['currency']} {mask_val(bal_str)}", expanded=False):
+                            hist = acc.get("history", [])
+                            if hist:
+                                hist_df = pd.DataFrame(hist).sort_values("date", ascending=False).reset_index(drop=True)
+                                for _, r in hist_df.head(5).iterrows():
+                                    st.markdown(format_hist_row(r, st.session_state.privacy_mode), unsafe_allow_html=True)
+                                
+                                if len(hist_df) > 5:
+                                    with st.expander(f"展開其餘 {len(hist_df)-5} 筆紀錄..."):
+                                        for _, r in hist_df.iloc[5:].iterrows():
+                                            st.markdown(format_hist_row(r, st.session_state.privacy_mode), unsafe_allow_html=True)
+                            else:
+                                st.caption("尚無異動紀錄")
+
+                    with c_adj:
+                        if st.button("調整", key=f"adj_c_{acc['id']}", use_container_width=True):
+                            st.session_state.adjust_cash_id = acc["id"]
+                            st.rerun()
+                    with c_edit:
+                        if st.button("編輯", key=f"edit_c_{acc['id']}", use_container_width=True):
+                            st.session_state.edit_cash_id = acc["id"]
+                            st.rerun()
+                    with c_del:
+                        if st.button("刪除", key=f"del_c_{acc['id']}", use_container_width=True):
+                            st.session_state.cash_accounts = [a for a in st.session_state.cash_accounts if a["id"] != acc["id"]]
+                            save_data("cash_accounts", st.session_state.cash_accounts)
+                            st.rerun()
+
+                st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
             st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
             if not cash_df.empty and cash_total_display > 0:
@@ -782,7 +855,19 @@ def render_liability_manager(unit, display_currency, total_value, net_value, btc
                 st.write("")
                 if st.form_submit_button("新增負債", use_container_width=True):
                     if new_lib_name and safe_float(new_lib_bal) is not None:
-                        st.session_state.liabilities_accounts.append({"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "name": new_lib_name.strip(), "currency": new_lib_curr, "balance": safe_float(new_lib_bal)})
+                        new_acc = {
+                            "id": datetime.now().strftime("%Y%m%d%H%M%S%f"), 
+                            "name": new_lib_name.strip(), 
+                            "currency": new_lib_curr, 
+                            "balance": safe_float(new_lib_bal),
+                            "history": [{
+                                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "action": "建立",
+                                "amount": safe_float(new_lib_bal),
+                                "note": "初始餘額"
+                            }]
+                        }
+                        st.session_state.liabilities_accounts.append(new_acc)
                         save_data("liabilities_accounts", st.session_state.liabilities_accounts)
                         st.success("已成功新增負債！")
                         st.rerun()
@@ -795,6 +880,9 @@ def render_liability_manager(unit, display_currency, total_value, net_value, btc
                 reverse=True
             )
             for acc in sorted_liabilities:
+                if "history" not in acc:
+                    acc["history"] = [{"date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "action": "初始", "amount": acc["balance"], "note": "系統升級預設"}]
+
                 if st.session_state.edit_liability_id == acc["id"]:
                     c1, c2, c3, c4, c5 = st.columns([2, 1, 2, 1, 1])
                     new_name = c1.text_input("名稱", acc["name"], key=f"lib_name_{acc['id']}", label_visibility="collapsed")
@@ -802,25 +890,73 @@ def render_liability_manager(unit, display_currency, total_value, net_value, btc
                     new_bal = c3.text_input("金額", str(acc["balance"]), key=f"lib_bal_{acc['id']}", label_visibility="collapsed")
                     if c4.button("儲存", key=f"save_lib_{acc['id']}", type="primary", use_container_width=True):
                         acc["name"], acc["currency"] = new_name.strip() if new_name.strip() else acc["name"], new_curr
-                        if safe_float(new_bal) is not None: acc["balance"] = safe_float(new_bal)
+                        if safe_float(new_bal) is not None:
+                            old_bal = acc["balance"]
+                            new_b = safe_float(new_bal)
+                            if new_b != old_bal:
+                                acc["history"].append({"date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "action": "編輯", "amount": new_b, "note": f"由 {old_bal} 覆蓋修改為 {new_b}"})
+                            acc["balance"] = new_b
                         save_data("liabilities_accounts", st.session_state.liabilities_accounts)
                         st.session_state.edit_liability_id = None
                         st.rerun()
                     if c5.button("取消", key=f"cancel_lib_{acc['id']}", use_container_width=True):
                         st.session_state.edit_liability_id = None
                         st.rerun()
+                elif st.session_state.adjust_liability_id == acc["id"]:
+                    c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 2.5, 1, 1])
+                    adj_type = c1.selectbox("動作", ["增加", "減少"], key=f"adj_t_{acc['id']}", label_visibility="collapsed")
+                    adj_amt = c2.text_input("金額", key=f"adj_a_{acc['id']}", label_visibility="collapsed", placeholder="輸入金額")
+                    adj_note = c3.text_input("備註", key=f"adj_n_{acc['id']}", label_visibility="collapsed", placeholder="選填備註")
+                    if c4.button("確認", key=f"save_adj_{acc['id']}", type="primary", use_container_width=True):
+                        amt_val = safe_float(adj_amt)
+                        if amt_val is not None and amt_val > 0:
+                            if adj_type == "增加":
+                                acc["balance"] += amt_val
+                            else:
+                                acc["balance"] -= amt_val
+                            acc["history"].append({"date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "action": adj_type, "amount": amt_val, "note": adj_note})
+                            save_data("liabilities_accounts", st.session_state.liabilities_accounts)
+                            st.session_state.adjust_liability_id = None
+                            st.rerun()
+                        else:
+                            st.warning("請輸入大於 0 的金額")
+                    if c5.button("取消", key=f"cancel_adj_{acc['id']}", use_container_width=True):
+                        st.session_state.adjust_liability_id = None
+                        st.rerun()
                 else:
-                    c1, c2, c3, c4 = st.columns([3.5, 5.0, 0.8, 0.8])
-                    c1.markdown(f"<div style='font-size:19px; font-weight:bold; margin-top:4px;'>{acc['name']}</div>", unsafe_allow_html=True)
+                    c_main, c_adj, c_edit, c_del = st.columns([7.5, 0.8, 0.8, 0.8])
                     bal_str = f"{acc['balance']:,.0f}" if acc['currency'] == "TWD" else f"{acc['balance']:,.2f}"
-                    c2.markdown(f"<div style='font-size:19px; margin-top:4px;'>{acc['currency']} {mask_val(bal_str)}</div>", unsafe_allow_html=True)
-                    if c3.button("編輯", key=f"edit_lib_{acc['id']}", use_container_width=True):
-                        st.session_state.edit_liability_id = acc["id"]
-                        st.rerun()
-                    if c4.button("刪除", key=f"del_lib_{acc['id']}", use_container_width=True):
-                        st.session_state.liabilities_accounts = [a for a in st.session_state.liabilities_accounts if a["id"] != acc["id"]]
-                        save_data("liabilities_accounts", st.session_state.liabilities_accounts)
-                        st.rerun()
+                    
+                    with c_main:
+                        with st.expander(f"💳 {acc['name']} ｜ {acc['currency']} {mask_val(bal_str)}", expanded=False):
+                            hist = acc.get("history", [])
+                            if hist:
+                                hist_df = pd.DataFrame(hist).sort_values("date", ascending=False).reset_index(drop=True)
+                                for _, r in hist_df.head(5).iterrows():
+                                    st.markdown(format_hist_row(r, st.session_state.privacy_mode), unsafe_allow_html=True)
+                                
+                                if len(hist_df) > 5:
+                                    with st.expander(f"展開其餘 {len(hist_df)-5} 筆紀錄..."):
+                                        for _, r in hist_df.iloc[5:].iterrows():
+                                            st.markdown(format_hist_row(r, st.session_state.privacy_mode), unsafe_allow_html=True)
+                            else:
+                                st.caption("尚無異動紀錄")
+
+                    with c_adj:
+                        if st.button("調整", key=f"adj_lib_{acc['id']}", use_container_width=True):
+                            st.session_state.adjust_liability_id = acc["id"]
+                            st.rerun()
+                    with c_edit:
+                        if st.button("編輯", key=f"edit_lib_{acc['id']}", use_container_width=True):
+                            st.session_state.edit_liability_id = acc["id"]
+                            st.rerun()
+                    with c_del:
+                        if st.button("刪除", key=f"del_lib_{acc['id']}", use_container_width=True):
+                            st.session_state.liabilities_accounts = [a for a in st.session_state.liabilities_accounts if a["id"] != acc["id"]]
+                            save_data("liabilities_accounts", st.session_state.liabilities_accounts)
+                            st.rerun()
+
+                st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
             st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
             c_chart_left, c_chart_right = st.columns([1.5, 1.0])
