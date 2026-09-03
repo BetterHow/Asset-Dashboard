@@ -85,7 +85,6 @@ def load_or_migrate_data(sheet_name, default_val):
 # ========================================================
 # 📊 正式 App 初始化與狀態管理
 # ========================================================
-# 🟢 將下拉選單(st.expander)的標題字體統一放大至 22px 並加粗
 st.markdown("""<style>
 section[data-testid="stSidebar"] > div:first-child { overflow-y: auto; } 
 div[data-testid="collapsedControl"], button[data-testid="stSidebarCollapseButton"] { position: fixed !important; top: 10px !important; z-index: 999999; } 
@@ -449,7 +448,7 @@ def calculate_holdings(transactions):
                 "數量": h["數量"], "原始總成本": h["原始總成本"], "平均價格": h["avg_cost"],
                 "CC權利金": h["CC權利金"], "SP權利金": h["SP權利金"], "股息": h["股息"],
                 "已實現損益": h["已實現損益"], "歷史買進數量": h["歷史買進數量"], "歷史賣出數量": h["歷史賣出數量"], 
-                "is_cash": False, "is_margin": False 
+                "is_cash": False, "is_margin": False
             })
     return result
 
@@ -650,7 +649,6 @@ with st.sidebar:
     
     if tv_str != st.session_state.prev_ticker:
         clt = tv_str.replace(".TW", "").replace(".TWO", "")
-        # 🟢 已經將「期貨」從一般交易類別中徹底移除
         st.session_state["type_select"] = "債券" if clt.endswith("B") and len(clt)>1 and clt[:-1].isdigit() else "台股" if clt.isdigit() or (len(clt)>1 and clt[:-1].isdigit() and clt[-1] in ["L","R"]) else "加密貨幣" if "-USD" in tv_str else "美股" if tv_str.isalpha() else "其他"
         st.session_state["currency_select"] = "USD" if st.session_state["type_select"] in ["美股", "加密貨幣"] else "TWD"
         st.session_state.prev_ticker = tv_str
@@ -668,12 +666,10 @@ with st.sidebar:
     note = st.text_input("備註", key="note_input")
 
     if st.button("儲存", type="primary", use_container_width=True):
-        # 🟢 修復 0 值被拒絕的 Bug：將判斷全面改為嚴格 is not None
         q = safe_float(qty_str)
         p = safe_float(price_str)
         is_prem = action in ["Sell Put", "Covered Call", "配息"]
         
-        # 🟢 新增防呆：配息時如果留白數量，自動預設為 0
         if is_prem and q is None:
             q = 0.0
             
@@ -700,7 +696,6 @@ with st.sidebar:
             save_data("history_snapshots", {})
             st.success("歷史快照已清除！請點擊上方重新整理。")
 
-# 🟢 歷史紀錄 UI
 def format_hist_row(r, privacy):
     sign = "+" if r['action'] in ["增加", "建立", "入金"] or "更新權益數 (+" in r['action'] else "-" if r['action'] in ["減少", "出金"] or "更新權益數 (-" in r['action'] else ""
     raw_amt = f"{sign}{abs(r['amount']):,.2f}" if r['amount'] % 1 != 0 else f"{sign}{abs(r['amount']):,.0f}"
@@ -709,7 +704,6 @@ def format_hist_row(r, privacy):
     note_str = f"<span style='color:#94a3b8; font-size:16px; margin-left:8px;'>{r.get('note', '')}</span>" if r.get('note') else ""
     return f"<div style='margin-bottom:6px; font-size:18px;'>🗓️ <span style='color:#94a3b8; font-size:16px;'>{r['date'][:16]}</span> ｜ <span style='color:{action_color}; font-weight:600;'>{r['action']}</span> ｜ <b>{amt_str}</b>{note_str}</div>"
 
-# 🟢 核心功能：獨立歷史紀錄編輯與還原邏輯
 def render_account_history(acc, category_name):
     history_list = acc.get("history", [])
     if not history_list:
@@ -889,7 +883,6 @@ def render_cash_manager(unit, display_currency, btc_usd, usd_twd):
         safe_unit = unit.replace("$", "&#36;")
         cash_str = f"{safe_unit} {cash_total_display:,.0f}" if display_currency != "BTC" else f"{safe_unit} {cash_total_display:,.4f}"
         
-        # 🟢 標題與彈出式新增按鈕並排
         c_head1, c_head2 = st.columns([5.5, 2.0])
         with c_head1:
             st.markdown(f"<div style='font-size: 22px; font-weight: bold; margin-bottom: 15px;'>現金總額： {mask_val(cash_str)}</div>", unsafe_allow_html=True)
@@ -1004,7 +997,6 @@ def render_cash_manager(unit, display_currency, btc_usd, usd_twd):
             st.caption("尚無帳戶，請點選右上角新增。")
 
         st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
-        # 🟢 圖表現在完全獨立在清單外
         if not cash_df.empty and cash_total_display > 0:
             c_chart_left, c_chart_right = st.columns([1.5, 1.0])
             with c_chart_left:
@@ -1082,7 +1074,6 @@ def render_margin_manager(unit, display_currency, btc_usd, usd_twd):
         pnl_clr = "#4ade80" if pnl_val >= 0 else "#ef4444"
         pnl_str = f"{sgn}{safe_unit} {pnl_val:,.0f} ({sgn}{pnl_pct:.2f}%)" if display_currency != "BTC" else f"{sgn}{safe_unit} {pnl_val:,.4f} ({sgn}{pnl_pct:.2f}%)"
 
-        # 🟢 標題與彈出式新增按鈕並排
         c_head1, c_head2 = st.columns([5.5, 2.0])
         with c_head1:
             st.markdown(f"<div style='font-size: 22px; font-weight: bold; margin-bottom: 15px;'>期貨權益數總額： {mask_val(bal_str)} <span style='font-size: 18px; color: {pnl_clr}; font-weight: normal;'>｜ 累積損益： {mask_val(pnl_str)}</span></div>", unsafe_allow_html=True)
@@ -1222,7 +1213,6 @@ def render_margin_manager(unit, display_currency, btc_usd, usd_twd):
             st.caption("尚無帳戶，請點選右上角新增。")
 
         st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
-        # 🟢 圖表現在完全獨立在清單外
         if not margin_df.empty and margin_total_bal > 0:
             c_chart_left, c_chart_right = st.columns([1.5, 1.0])
             with c_chart_left:
@@ -1287,7 +1277,6 @@ def render_liability_manager(unit, display_currency, total_value, net_value, btc
         lib_str = f"{safe_unit} {lib_total_display:,.0f}" if display_currency != "BTC" else f"{safe_unit} {lib_total_display:,.4f}"
         lev_str = f"{total_value / net_value:.2f} 倍" if net_value > 0 else 'N/A'
         
-        # 🟢 標題與彈出式新增按鈕並排
         c_head1, c_head2 = st.columns([5.5, 2.0])
         with c_head1:
             st.markdown(f"<div style='font-size: 22px; font-weight: bold; margin-bottom: 15px;'>負債總額： {mask_val(lib_str)} <span style='font-size: 18px; color: #94a3b8; font-weight: normal;'>｜ 槓桿比率： {mask_val(lev_str)}</span></div>", unsafe_allow_html=True)
@@ -1402,7 +1391,6 @@ def render_liability_manager(unit, display_currency, total_value, net_value, btc
             st.caption("尚無帳戶，請點選右上角新增。")
 
         st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
-        # 🟢 圖表現在完全獨立在清單外
         if not lib_df.empty and lib_total_display > 0:
             c_chart_left, c_chart_right = st.columns([1.5, 1.0])
             with c_chart_left:
@@ -1615,7 +1603,7 @@ def render_overall_trend_section(history_snapshots, selected_cat, display_curren
                 unit_str = unit.replace("$", "&#36;")
                 
                 def get_val_text_global(x):
-                    if x < 0: return fspan style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>"
+                    if x < 0: return f"<span style='color:#ef4444'>-{unit_str} {abs(x):,.0f}</span>"
                     elif x > 0: return f"<span style='color:#4ade80'>+{unit_str} {x:,.0f}</span>"
                     else: return f"{unit_str} 0"
 
