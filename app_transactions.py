@@ -96,7 +96,8 @@ div[data-testid="stExpander"] details summary p { font-size: 22px !important; fo
 for k, def_val in [("transactions", []), ("manual_prices", {}), ("cash_accounts", []), ("margin_accounts", []), ("liabilities_accounts", []), ("history_snapshots", {})]:
     if k not in st.session_state: st.session_state[k] = load_or_migrate_data(k, def_val)
 
-for k, def_val in [("selected_category", None), ("editing_id", None), ("edit_cash_id", None), ("edit_liability_id", None), ("edit_margin_id", None), ("adjust_cash_id", None), ("adjust_liability_id", None), ("adjust_margin_id", None), ("edit_hist_id", None), ("display_currency", "TWD"), ("selected_extras", []), ("visible_items", set()), ("clear_form", False), ("privacy_mode", False), ("prev_ticker", ""), ("prev_type", "台股"), ("prev_name_input", ""), ("prev_ticker_input", "")]:
+# 🟢 加入 trend_time_range 的全局記憶預設值
+for k, def_val in [("selected_category", None), ("editing_id", None), ("edit_cash_id", None), ("edit_liability_id", None), ("edit_margin_id", None), ("adjust_cash_id", None), ("adjust_liability_id", None), ("adjust_margin_id", None), ("edit_hist_id", None), ("display_currency", "TWD"), ("selected_extras", []), ("visible_items", set()), ("clear_form", False), ("privacy_mode", False), ("prev_ticker", ""), ("prev_type", "台股"), ("prev_name_input", ""), ("prev_ticker_input", ""), ("global_trend_range", "1個月")]:
     if k not in st.session_state: st.session_state[k] = def_val
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -448,7 +449,7 @@ def calculate_holdings(transactions):
                 "數量": h["數量"], "原始總成本": h["原始總成本"], "平均價格": h["avg_cost"],
                 "CC權利金": h["CC權利金"], "SP權利金": h["SP權利金"], "股息": h["股息"],
                 "已實現損益": h["已實現損益"], "歷史買進數量": h["歷史買進數量"], "歷史賣出數量": h["歷史賣出數量"], 
-                "is_cash": False, "is_margin": False
+                "is_cash": False, "is_margin": False 
             })
     return result
 
@@ -1013,18 +1014,18 @@ def render_cash_manager(unit, display_currency, btc_usd, usd_twd):
                             div = 1 if display_currency == "TWD" else usd_twd if display_currency == "USD" else (btc_usd * usd_twd if btc_usd else 1)
                             cash_hist.append({'Date': d_str, 'Value': c_val / div})
                             
-                    cash_hist_df = pd.DataFrame(cash_hist)
-                    if not cash_hist_df.empty:
-                        cash_hist_df['Date'] = pd.to_datetime(cash_hist_df['Date'])
-                        cash_hist_df = cash_hist_df.sort_values('Date').set_index('Date').resample('D').ffill().reset_index()
-                        if cash_hist_df['Value'].sum() > 0:
-                            fig_cash_line = _build_cash_trend_fig(
-                                tuple(cash_hist_df['Date'].astype(str).tolist()),
-                                tuple(cash_hist_df['Value'].tolist()),
-                                safe_unit,
-                                st.session_state.privacy_mode
-                            )
-                            st.plotly_chart(fig_cash_line, use_container_width=True, config={'scrollZoom': True})
+                        cash_hist_df = pd.DataFrame(cash_hist)
+                        if not cash_hist_df.empty:
+                            cash_hist_df['Date'] = pd.to_datetime(cash_hist_df['Date'])
+                            cash_hist_df = cash_hist_df.sort_values('Date').set_index('Date').resample('D').ffill().reset_index()
+                            if cash_hist_df['Value'].sum() > 0:
+                                fig_cash_line = _build_cash_trend_fig(
+                                    tuple(cash_hist_df['Date'].astype(str).tolist()),
+                                    tuple(cash_hist_df['Value'].tolist()),
+                                    safe_unit,
+                                    st.session_state.privacy_mode
+                                )
+                                st.plotly_chart(fig_cash_line, use_container_width=True, config={'scrollZoom': True})
                         else:
                             st.caption("尚無足夠的歷史資料繪製趨勢圖。")
                     else:
@@ -1580,7 +1581,16 @@ def render_overall_trend_section(history_snapshots, selected_cat, display_curren
 
             cr, cp = st.columns([2.5, 1.5])
             with cr:
-                tr = st.radio("選擇時間區間", ["1週", "1個月", "3個月", "半年", "1年", "全部"], index=1, horizontal=True, label_visibility="collapsed")
+                # 🟢 全域記憶時間區間邏輯
+                options = ["1週", "1個月", "3個月", "半年", "1年", "全部"]
+                current_val = st.session_state.global_trend_range
+                idx = options.index(current_val) if current_val in options else 1
+                
+                def on_range_change():
+                    st.session_state.global_trend_range = st.session_state.trend_radio_widget
+                    
+                tr = st.radio("選擇時間區間", options, index=idx, key="trend_radio_widget", horizontal=True, label_visibility="collapsed", on_change=on_range_change)
+                
             tdy = pd.to_datetime(date.today())
             sd = tdy - pd.DateOffset(weeks=1) if tr == "1週" else tdy - pd.DateOffset(months=1) if tr == "1個月" else tdy - pd.DateOffset(months=3) if tr == "3個月" else tdy - pd.DateOffset(months=6) if tr == "半年" else tdy - pd.DateOffset(years=1) if tr == "1年" else hdf['Date'].min() - pd.Timedelta(days=3)
             
